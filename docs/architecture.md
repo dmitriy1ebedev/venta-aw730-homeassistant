@@ -42,3 +42,11 @@ allocation algorithms on synthetic accessories to compare AID/IID identities
 across simulated reload/restart cycles. This does **not** test existing Apple
 Home pairings or a real running HomeKit server. No user pairings or `.storage`
 files may be deleted or rewritten as part of an upgrade test.
+
+## Future UI preparation (not installed)
+
+The experimental [entity-discovery plan](ENTITY_DISCOVERY.md) restricts helper
+entity choices to the exact LocalTuya device and config entry, excludes disabled
+and hidden registry entities, and requires explicit confirmation of every role.
+It is a read-only pure planning module; the existing YAML integration does not
+yet consume it, nor does it write config entries or change pairings.

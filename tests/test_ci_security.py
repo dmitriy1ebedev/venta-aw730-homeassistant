@@ -42,7 +42,7 @@ class CISecurityTests(unittest.TestCase):
         for gate in ("hacs", "hassfest", "ha_runtime_smoke"):
             self.assertIn("dmitriy1ebedev/venta-aw730-homeassistant", jobs[gate]["if"])
         smoke = "\\n".join(s.get("run", "") for s in jobs["ha_runtime_smoke"]["steps"])
-        for required in ("scripts/build_release.py", "scripts.stage_ha_runtime", "scripts/ha_native_homekit_smoke.py", "scripts/ha_homekit_identity_smoke.py", "ghcr.io/home-assistant/home-assistant:2026.11.1", "--network none", "check_config --config /config", "--ha-version 2026.11.1"):
+        for required in ("scripts/build_release.py", "scripts.stage_ha_runtime", "scripts/ha_native_homekit_smoke.py", "scripts/ha_homekit_identity_smoke.py", "scripts/ha_entity_registry_smoke.py", "ghcr.io/home-assistant/home-assistant:2026.11.1", "--network none", "check_config --config /config", "--ha-version 2026.11.1"):
             self.assertIn(required, smoke)
 
     def test_topic_exception_is_explicit_and_documented(self):
