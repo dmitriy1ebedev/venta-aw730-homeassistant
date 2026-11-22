@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from scripts.build_release import (
-    COMPONENT, ROOT, ReleaseValidationError, component_files, release_version,
+    COMPONENT, ROOT, ReleaseValidationError, build_archive, component_files, release_version,
 )
 
 
@@ -25,6 +25,14 @@ class MaintenanceReleaseContracts(unittest.TestCase):
         self.assertNotIn("_venta_accessory_factory", source)
         self.assertNotIn("log_diagnostics", source)
         self.assertFalse((ROOT / COMPONENT / "diagnostics.py").exists())
+
+    def test_release_archive_fingerprint_is_frozen(self):
+        with tempfile.TemporaryDirectory() as folder:
+            archive = build_archive(Path(folder) / "candidate.zip", expected_tag="v1.0.5")
+        self.assertEqual(
+            archive["sha256"],
+            "ba758a504584633ff73a3271b48c24424295bc6f26a40c52f711fb4ae4fc87c4",
+        )
 
     def test_sensitive_filenames_refused(self):
         with tempfile.TemporaryDirectory() as folder:
