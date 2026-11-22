@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-- Add an explicit, read-only `venta_homekit_native.log_diagnostics` service with allow-listed component versions, entity availability, HomeKit Bridge state and safe follow-up codes; excludes secrets, identifiers, raw sensor data and network information.
+- Add an explicit, read-only `venta_homekit_native.log_diagnostics` service returning a sanitized JSON response in Developer Tools (and optionally logging at INFO) with allow-listed versions, entity availability, HomeKit Bridge state and safe follow-up codes; excludes secrets, identifiers, raw sensor data and network information.
 - Keep LocalTuya protocol error attribution separate from Home Assistant entity state; the service cannot infer handshake root causes.
 
 ## 1.0.4 (2026-11-22)

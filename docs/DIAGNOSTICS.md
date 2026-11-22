@@ -5,8 +5,10 @@ This is documentation for the **next source release**: the installed H96 baselin
 ## How to collect a diagnostic report after an approved release
 
 In Home Assistant, open **Developer Tools → Actions** and select
-`venta_homekit_native.log_diagnostics`. Run it once, then search the
-Home Assistant logs for `Venta diagnostic status:`. The service is read-only:
+`venta_homekit_native.log_diagnostics`. Run it once to see the JSON response
+in Developer Tools. If integration INFO logging is enabled, the same report is
+also written to the Home Assistant log as `Venta diagnostic status:`; the
+response does not depend on logger verbosity. The service is read-only:
 it does **not** issue Tuya commands, reconnect devices, start a new HomeKit
 server, reset service counters or modify pairings.
 

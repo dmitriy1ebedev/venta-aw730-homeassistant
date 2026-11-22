@@ -192,7 +192,8 @@ class DiagnosticsContractTests(unittest.TestCase):
         self.assertIn("log_diagnostics:", services)
         self.assertIn("read-only", services)
         init = (COMPONENT / "__init__.py").read_text()
-        self.assertIn('hass.services.async_register(DOMAIN, "log_diagnostics", log_diagnostics)', init)
+        self.assertIn('"log_diagnostics", log_diagnostics', init)
+        self.assertIn("supports_response=SupportsResponse.OPTIONAL", init)
         self.assertIn("collect_diagnostics(", init)
         self.assertNotIn("local_key", json.dumps(self.collect()))
 
