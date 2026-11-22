@@ -77,7 +77,7 @@ def validate(config: Path, expected_version: str) -> dict:
         hass = SimpleNamespace(
             data={},
             config_entries=SimpleNamespace(
-                async_entries=lambda domain: [bridge] if domain == "homekit" else []
+                async_entries=lambda domain, *args: [bridge] if domain == "homekit" else []
             ),
         )
         flow.hass = hass
