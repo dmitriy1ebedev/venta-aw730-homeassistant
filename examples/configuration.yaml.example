@@ -1,0 +1,8 @@
+venta_homekit_native:
+  humidifier_entity: humidifier.venta_aw730
+  bridge_title: "HomeKit Bridge"
+  fan_entity: select.venta_aw730_fan_speed
+  led_entity: switch.venta_aw730_led_on
+  brightness_entity: select.venta_aw730_led_brightness
+  temperature_entity: sensor.venta_aw730_temperature
+  humidity_entity: sensor.venta_aw730_humidity
