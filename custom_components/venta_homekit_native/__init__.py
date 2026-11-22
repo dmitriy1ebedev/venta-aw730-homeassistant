@@ -17,6 +17,8 @@ import voluptuous as vol
 
 from homeassistant.helpers import config_validation as cv
 from pyhap.util import callback as pyhap_callback
+from pyhap.characteristic import Characteristic
+from pyhap.service import Service
 
 from homeassistant.const import (
     ATTR_ENTITY_ID,
@@ -323,6 +325,43 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
         except (TypeError, ValueError, AttributeError):
             pass
 
+def _venta_accessory_factory(
+    hass: HomeAssistant,
+    driver,
+    name: str,
+    entity_id: str,
+    aid: int,
+    config: dict,
+):
+    """Use the native HA class for every humidifier other than Venta.
+
+    HomeKit's TYPES registry is global. A per-entity factory avoids changing
+    accessory classes, characteristic handlers or AIDs for other humidifiers.
+    The Venta class and its linked-service unique IDs remain unchanged.
+    """
+    cls = (
+        VentaEnhancedHumidifier
+        if entity_id == ENTITY
+        else NativeHumidifierDehumidifier
+    )
+    return cls(hass, driver, name, entity_id, aid, config)
+
+
+def _homekit_apis_compatible() -> bool:
+    """Refuse to patch when required HA/PyHAP internals have changed."""
+    return all(
+        callable(getattr(owner, method, None))
+        for owner, method in (
+            (NativeHumidifierDehumidifier, "get_service"),
+            (NativeHumidifierDehumidifier, "set_primary_service"),
+            (NativeHumidifierDehumidifier, "add_preload_service"),
+            (NativeHumidifierDehumidifier, "async_update_state"),
+            (Characteristic, "override_properties"),
+            (Service, "add_linked_service"),
+        )
+    )
+
+
 @callback
 def _reload_venta(hass: HomeAssistant):
     """Rebuild only Venta inside the existing bridge; all other AIDs survive."""
@@ -385,10 +424,16 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     HUMIDITY = values["humidity_entity"]
     EXTRA_ENTITIES = (FAN, LED, BRIGHTNESS, TEMPERATURE)
     original = TYPES.get("HumidifierDehumidifier")
-    if original not in (NativeHumidifierDehumidifier, VentaEnhancedHumidifier):
+    if original is _venta_accessory_factory and hass.data.get(DOMAIN, {}).get("patched"):
+        # Repeated setup must not schedule another reload or duplicate services.
+        return True
+    if original is not NativeHumidifierDehumidifier:
         _LOGGER.error("Unexpected HomeKit registry: refusing to patch")
         return False
-    TYPES["HumidifierDehumidifier"] = VentaEnhancedHumidifier
+    if not _homekit_apis_compatible():
+        _LOGGER.error("Incompatible HomeKit/PyHAP API: refusing to patch")
+        return False
+    TYPES["HumidifierDehumidifier"] = _venta_accessory_factory
     hass.data[DOMAIN] = {"original": original, "patched": True}
 
     # Marketplace replaces this integration's files, not LocalTuya's template

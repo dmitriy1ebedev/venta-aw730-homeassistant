@@ -63,8 +63,25 @@ class FakeHass:
 
 
 class FakeNativeHumidifier:
+    def __init__(self, hass=None, driver=None, name=None, entity_id=None, aid=None, config=None):
+        self.entity_id = entity_id
+        self.aid = aid
+        self.native_only = True
+
     def _set_chars(self, values):
         self.parent_chars = dict(values)
+
+    def get_service(self, *_args):
+        return None
+
+    def set_primary_service(self, *_args):
+        return None
+
+    def add_preload_service(self, *_args, **_kwargs):
+        return None
+
+    def async_update_state(self, *_args):
+        return None
 
 
 def _load_venta_with_stubs():
@@ -96,6 +113,12 @@ def _load_venta_with_stubs():
     )
     module("homeassistant.helpers.config_validation", entity_id=str, string=str)
     module("pyhap.util", callback=lambda fn: fn)
+    module("pyhap.characteristic", Characteristic=type(
+        "MockHAPCharacteristic", (), {"override_properties": lambda self, **k: None}
+    ))
+    module("pyhap.service", Service=type(
+        "MockHAPService", (), {"add_linked_service": lambda self, service: None}
+    ))
     module(
         "homeassistant.const",
         __version__="2026.11.1",
@@ -265,6 +288,50 @@ class VentaCommandBehaviorTests(unittest.IsolatedAsyncioTestCase):
 
 
 
+class VentaHomeKitIdentityRoutingTests(unittest.TestCase):
+    """Ensure a globally registered factory leaves all other HA accessories native."""
+
+    def setUp(self):
+        self.integration = _load_venta_with_stubs()
+        self.integration.ENTITY = "humidifier.venta_ci_fake"
+
+    def test_unrelated_humidifiers_use_unmodified_native_class(self):
+        other = self.integration._venta_accessory_factory(
+            None, None, "Other humidifier", "humidifier.other_fake", 19, {}
+        )
+        self.assertIs(type(other), FakeNativeHumidifier)
+        self.assertEqual(other.entity_id, "humidifier.other_fake")
+        self.assertEqual(other.aid, 19)
+        self.assertTrue(other.native_only)
+        self.assertFalse(hasattr(other, "_venta_set_fan"))
+        other2 = self.integration._venta_accessory_factory(
+            None, None, "Other humidifier", "humidifier.other_fake", 19, {}
+        )
+        self.assertEqual((other2.entity_id, other2.aid), (other.entity_id, other.aid))
+
+    def test_venta_routes_to_existing_enhanced_class_without_changing_aid(self):
+        arguments = (None, None, "Venta", "humidifier.venta_ci_fake", 27, {})
+        sentinel = object()
+        with patch.object(
+            self.integration, "VentaEnhancedHumidifier", return_value=sentinel,
+        ) as construct:
+            accessory = self.integration._venta_accessory_factory(*arguments)
+        self.assertIs(accessory, sentinel)
+        construct.assert_called_once_with(*arguments)
+
+    def test_compatibility_guard_fails_closed_on_api_drift(self):
+        self.assertTrue(self.integration._homekit_apis_compatible())
+        with patch.object(
+            self.integration.Characteristic, "override_properties", None,
+        ):
+            self.assertFalse(self.integration._homekit_apis_compatible())
+        with patch.object(
+            self.integration.NativeHumidifierDehumidifier,
+            "add_preload_service", None,
+        ):
+            self.assertFalse(self.integration._homekit_apis_compatible())
+
+
 class VentaDiagnosticsRegistrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_service_registers_and_logs_strictly_redacted_status(self):
         import json
@@ -338,6 +405,15 @@ class VentaDiagnosticsRegistrationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn((domain, "reload_venta"), handlers)
                 self.assertIn((domain, "log_diagnostics"), handlers)
                 self.assertEqual(hass.executor_calls, 1)
+                # Repeated setup must not register another listener or reload.
+                again = await integration.async_setup(hass, {domain: values})
+                self.assertTrue(again)
+                self.assertEqual(hass.executor_calls, 1)
+                self.assertEqual(len(handlers), 2)
+                self.assertIs(
+                    integration.TYPES["HumidifierDehumidifier"],
+                    integration._venta_accessory_factory,
+                )
                 response = handlers[(domain, "log_diagnostics")](None)
                 self.assertEqual(
                     registered_options[(domain, "log_diagnostics")]["supports_response"],
