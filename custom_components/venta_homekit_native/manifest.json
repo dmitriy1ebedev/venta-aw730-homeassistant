@@ -5,10 +5,10 @@
     "sensors.air_quality",
     "sensors.temperature_humidity"
   ],
-  "config_flow": true,
   "codeowners": [
     "@dmitriy1ebedev"
   ],
+  "config_flow": true,
   "dependencies": [
     "homekit"
   ],
