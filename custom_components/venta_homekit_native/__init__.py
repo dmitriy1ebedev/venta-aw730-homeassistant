@@ -394,6 +394,10 @@ async def _reload_when_bridge_ready(hass: HomeAssistant) -> None:
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     global ENTITY, BRIDGE_ENTRY, FAN, LED, BRIGHTNESS, TEMPERATURE, HUMIDITY, EXTRA_ENTITIES
     values = config.get(DOMAIN)
+    # No YAML is normal for a UI-configured installation; the config entry
+    # is validated and set up separately. Existing seven-key YAML is unchanged.
+    if values is None:
+        return True
     names = ("humidifier_entity", "bridge_title", "fan_entity", "led_entity",
              "brightness_entity", "temperature_entity", "humidity_entity")
     if not isinstance(values, dict) or any(
@@ -402,19 +406,43 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     ):
         _LOGGER.error("Venta: configuration.yaml must define all seven options")
         return False
-    matching = [e for e in hass.config_entries.async_entries("homekit")
-                if e.title == values["bridge_title"]]
+    # YAML keeps title matching. Config entries also pin the exact bridge ID
+    # so duplicate titles can never redirect a configured Venta accessory.
+    bridge_id = values.get("bridge_entry_id")
+    matching = [
+        e for e in hass.config_entries.async_entries("homekit")
+        if (e.entry_id == bridge_id if bridge_id else e.title == values["bridge_title"])
+    ]
     if len(matching) != 1:
-        _LOGGER.error("Venta: existing HomeKit bridge title must match exactly")
+        _LOGGER.error("Venta: existing HomeKit bridge identity must match exactly")
         return False
     bridge = matching[0]
     if bridge.options.get("mode", "bridge") != "bridge":
         _LOGGER.error("Venta: entry must be a HomeKit bridge")
         return False
-    included = bridge.options.get("filter", {}).get("include_entities", [])
-    if included and values["humidifier_entity"] not in included:
+    bridge_filter = bridge.options.get("filter") or {}
+    included = bridge_filter.get("include_entities") or []
+    excluded = bridge_filter.get("exclude_entities") or []
+    if (included and values["humidifier_entity"] not in included) or (
+        values["humidifier_entity"] in excluded
+    ):
         _LOGGER.error("Venta: humidifier must be included in existing HomeKit bridge")
         return False
+    original = TYPES.get("HumidifierDehumidifier")
+    if original is _venta_accessory_factory and hass.data.get(DOMAIN, {}).get("patched"):
+        # Repeated setup is idempotent only for the same exact accessory and
+        # bridge. Reject another config entry rather than switching globals.
+        if ENTITY == values["humidifier_entity"] and BRIDGE_ENTRY == bridge.entry_id:
+            return True
+        _LOGGER.error("Venta: another accessory is already registered")
+        return False
+    if original is not NativeHumidifierDehumidifier:
+        _LOGGER.error("Unexpected HomeKit registry: refusing to patch")
+        return False
+    if not _homekit_apis_compatible():
+        _LOGGER.error("Incompatible HomeKit/PyHAP API: refusing to patch")
+        return False
+    # No mutable globals change until all singleton and API gates pass.
     ENTITY = values["humidifier_entity"]
     BRIDGE_ENTRY = bridge.entry_id
     FAN = values["fan_entity"]
@@ -423,16 +451,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     TEMPERATURE = values["temperature_entity"]
     HUMIDITY = values["humidity_entity"]
     EXTRA_ENTITIES = (FAN, LED, BRIGHTNESS, TEMPERATURE)
-    original = TYPES.get("HumidifierDehumidifier")
-    if original is _venta_accessory_factory and hass.data.get(DOMAIN, {}).get("patched"):
-        # Repeated setup must not schedule another reload or duplicate services.
-        return True
-    if original is not NativeHumidifierDehumidifier:
-        _LOGGER.error("Unexpected HomeKit registry: refusing to patch")
-        return False
-    if not _homekit_apis_compatible():
-        _LOGGER.error("Incompatible HomeKit/PyHAP API: refusing to patch")
-        return False
     TYPES["HumidifierDehumidifier"] = _venta_accessory_factory
     hass.data[DOMAIN] = {"original": original, "patched": True}
 
@@ -490,3 +508,47 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     _LOGGER.info("Venta native HomeKit accessory extension registered")
     return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
+    """Set up one approved UI mapping without creating any HA entities.
+
+    The legacy YAML bridge is authoritative until explicitly migrated in
+    V120-03. A second entry may never take over the singleton HAP factory.
+    """
+    from .entity_discovery import DiscoveryError, validate_from_hass
+
+    if hass.data.get(DOMAIN, {}).get("patched"):
+        _LOGGER.error("Venta: existing YAML or UI setup must be migrated first")
+        return False
+    values = dict(entry.data)
+    try:
+        selections = {
+            role: values.get(f"{role}_entity")
+            for role in ("fan", "led", "brightness", "temperature", "humidity")
+        }
+        confirmed = frozenset(values.get("confirmed_unclassified", []))
+        problems = validate_from_hass(
+            hass, values.get("humidifier_entity"), selections,
+            confirmed_unclassified=confirmed,
+        )
+    except (DiscoveryError, TypeError, ValueError):
+        _LOGGER.error("Venta: saved entity mapping is no longer valid")
+        return False
+    if problems:
+        _LOGGER.error("Venta: saved entity mapping changed; repair required")
+        return False
+    ok = await async_setup(hass, {DOMAIN: values})
+    if ok and hass.data.get(DOMAIN, {}).get("patched"):
+        hass.data[DOMAIN]["config_entry_id"] = entry.entry_id
+    return ok
+
+
+async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
+    """Fail closed until HomeKit lifecycle-safe unload is implemented.
+
+    Returning False requires a restart instead of leaving an existing HAP
+    accessory bound to a different controller or accidentally re-pairing it.
+    V120-04 will implement guarded unload/reconfigure with identity tests.
+    """
+    return not hass.data.get(DOMAIN, {}).get("patched")

@@ -1,9 +1,11 @@
 # Venta 1.2.0 — safe entity association (V120-02 preview)
 
-**Source-only preview. This is not yet an installed setup wizard.** No change
-to existing seven-key YAML installations, HomeKit pairing or LocalTuya config
-entries is made by adding this module. The installed 1.0.4 release does not
-include it, and the separate 1.0.5 maintenance candidate excludes it.
+**Development branch only; not installed or accepted for release.** The
+P03.1 config flow now combines this read-only discovery with explicit bridge
+and role selection. The existing seven-key YAML installation, HomeKit pairing,
+and LocalTuya configuration remain unchanged. The installed 1.0.4 and the
+separate 1.0.5 maintenance release do not include this candidate. It must pass
+disposable Home Assistant runtime acceptance before any real installation.
 
 ## Trust boundary
 
@@ -44,10 +46,14 @@ the entity registry on submit**.
   2026.11.2 entity-registry API imports, using synthetic fixtures and a network-
   disabled container.
 
-**Not yet implemented:** UI entity selectors and confirmation screens,
-config_flow, source YAML import, persistence of a config entry, options,
-repair flow and a live HomeKit migration. Those are separate P03 roadmap
-acceptance gates. This helper is only a security-critical building block.
+**P03.1 worktree candidate:** config_flow.py provides source/bridge selectors,
+explicit role confirmation, config-entry persistence, duplicate prevention and
+revalidation at submit and setup. Synthetic offline tests do not establish a
+working HA setup flow or HomeKit lifecycle; those require a disposable HA test.
+
+**Still pending:** YAML import and migration (P03.3), options/reconfigure/repairs
+(P03.4), safe unload, disposable runtime acceptance and an owner-approved
+production canary (P03.5). No live HomeKit migration is performed here.
 No saved device IDs, LocalTuya local keys or pairing data should be placed in
 test fixtures, logs or GitHub issues.
 

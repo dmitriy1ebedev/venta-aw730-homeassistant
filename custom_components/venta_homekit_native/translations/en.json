@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select existing Venta device",
+        "description": "Choose a LocalTuya humidifier and an existing HomeKit bridge. No device or pairing settings will be changed.",
+        "data": {
+          "humidifier_entity": "LocalTuya humidifier",
+          "bridge_entry_id": "HomeKit bridge"
+        }
+      },
+      "entities": {
+        "title": "Confirm associated entities",
+        "description": "Select every function explicitly. Only entities belonging to the same LocalTuya device are available.",
+        "data": {
+          "fan_entity": "Fan speed",
+          "led_entity": "LED power",
+          "brightness_entity": "LED brightness",
+          "temperature_entity": "Temperature",
+          "humidity_entity": "Humidity",
+          "confirm_temperature": "I verified the temperature sensor type",
+          "confirm_humidity": "I verified the humidity sensor type"
+        }
+      }
+    },
+    "error": {
+      "invalid_humidifier": "The selected LocalTuya humidifier is no longer available.",
+      "bridge_unavailable": "The selected bridge is unavailable.",
+      "bridge_excludes_humidifier": "The existing HomeKit bridge does not include this humidifier.",
+      "invalid_entity": "The selected entity is missing, changed, or belongs to another device."
+    },
+    "abort": {
+      "single_instance_allowed": "Venta is already configured. Migrate or remove the existing configuration before creating another.",
+      "localtuya_humidifier_missing": "No eligible LocalTuya humidifier was found.",
+      "homekit_bridge_missing": "No existing HomeKit bridge was found.",
+      "bridge_unavailable": "The selected HomeKit bridge is no longer available.",
+      "bridge_excludes_humidifier": "The selected HomeKit bridge excludes this humidifier.",
+      "required_entities_missing": "One or more required entities are missing."
+    }
+  }
+}

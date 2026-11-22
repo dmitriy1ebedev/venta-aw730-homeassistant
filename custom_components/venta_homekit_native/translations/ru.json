@@ -1,0 +1,41 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Выбор существующей Venta",
+        "description": "Выберите увлажнитель LocalTuya и существующий мост HomeKit. Устройство и сопряжение не изменятся.",
+        "data": {
+          "humidifier_entity": "Увлажнитель LocalTuya",
+          "bridge_entry_id": "Мост HomeKit"
+        }
+      },
+      "entities": {
+        "title": "Проверка связанных сущностей",
+        "description": "Подтвердите каждую функцию отдельно. Доступны только сущности того же устройства LocalTuya.",
+        "data": {
+          "fan_entity": "Скорость вентилятора",
+          "led_entity": "Питание подсветки",
+          "brightness_entity": "Яркость подсветки",
+          "temperature_entity": "Температура",
+          "humidity_entity": "Влажность",
+          "confirm_temperature": "Я проверил тип датчика температуры",
+          "confirm_humidity": "Я проверил тип датчика влажности"
+        }
+      }
+    },
+    "error": {
+      "invalid_humidifier": "Выбранный увлажнитель LocalTuya недоступен.",
+      "bridge_unavailable": "Выбранный мост HomeKit недоступен.",
+      "bridge_excludes_humidifier": "Увлажнитель не включён в выбранный мост HomeKit.",
+      "invalid_entity": "Сущность отсутствует, изменилась или принадлежит другому устройству."
+    },
+    "abort": {
+      "single_instance_allowed": "Venta уже настроена. Сначала перенесите или удалите прежнюю конфигурацию.",
+      "localtuya_humidifier_missing": "Подходящий увлажнитель LocalTuya не найден.",
+      "homekit_bridge_missing": "Мост HomeKit не найден.",
+      "bridge_unavailable": "Выбранный мост HomeKit недоступен.",
+      "bridge_excludes_humidifier": "Мост HomeKit исключает этот увлажнитель.",
+      "required_entities_missing": "Не найдены все обязательные сущности."
+    }
+  }
+}
