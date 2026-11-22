@@ -5,7 +5,7 @@
 # Venta AW730
 
 [![Validation](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml/badge.svg)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml)
-[![Version 1.0.3](https://img.shields.io/badge/version-1.0.3-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
+[![Version 1.0.4](https://img.shields.io/badge/version-1.0.4-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
 [![Home Assistant](https://img.shields.io/badge/Home_Assistant-2026.11%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
 [![Apple HomeKit](https://img.shields.io/badge/Apple-HomeKit-111111?logo=apple&logoColor=white)](https://www.home-assistant.io/integrations/homekit/)
 [![Yandex Alice](https://img.shields.io/badge/Yandex-Alice-FFCC00)](https://docs.yaha-cloud.ru/)
@@ -31,13 +31,11 @@ Power, target humidity 30–70%, Auto / Manual / Sleep, five fan speeds, LED con
 [![Add to Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dmitriy1ebedev&repository=venta-aw730-homeassistant&category=integration)
 <!-- ha-marketplace:exclude-end -->
 
-The ready-made [`venta_aw730.yaml` template](custom_components/venta_homekit_native/templates/venta_aw730.yaml) is included in this integration. To register it in the LocalTuya template chooser, run **once in your Home Assistant terminal**:
+The [`venta_aw730.yaml` template](custom_components/venta_homekit_native/templates/venta_aw730.yaml) is included. Once Venta is configured and Home Assistant starts, the template is automatically made available in LocalTuya. Add the device with this template; do not download another one.
 
-```bash
-python3 /config/custom_components/venta_homekit_native/install_localtuya_template.py
-```
+If you are adding the device **before** configuring the Venta HomeKit extension, register the template once with `python3 /config/custom_components/venta_homekit_native/install_localtuya_template.py` in the Home Assistant terminal (for Container installations, run it via `docker exec`).
 
-For Home Assistant Container, run the command using `docker exec homeassistant ...` from the host. Then add the Venta device in LocalTuya and select `venta_aw730.yaml`. The installer does not overwrite an existing modified template unless `--replace` is specified, in which case it makes a backup.
+**Updates:** after updating Venta through Marketplace and restarting Home Assistant, an unmodified managed LocalTuya template is synchronized automatically with a backup of the prior version. Customized templates are never overwritten. LocalTuya stores already configured device entities separately, so changes to their mappings must be reviewed; the update does not silently rewrite device credentials or entity IDs. HomeKit and Alice export the **same existing humidifier entity**, without a second Venta device.
 
 **Apple Home:** configure an existing [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/), add the [configuration example](examples/configuration.yaml.example) to `configuration.yaml` with your entity IDs, validate and restart HA. Do not recreate your working Venta accessory or pairing.
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 import voluptuous as vol
 
@@ -27,6 +28,7 @@ from homeassistant.components.homekit.const import SIGNAL_RELOAD_ENTITIES, STATU
 from homeassistant.components.homekit.type_humidifiers import (
     HumidifierDehumidifier as NativeHumidifierDehumidifier,
 )
+from .install_localtuya_template import sync_managed_template
 
 DOMAIN = "venta_homekit_native"
 ENTITY = BRIDGE_ENTRY = FAN = LED = BRIGHTNESS = TEMPERATURE = HUMIDITY = None
@@ -384,6 +386,17 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         return False
     TYPES["HumidifierDehumidifier"] = VentaEnhancedHumidifier
     hass.data[DOMAIN] = {"original": original, "patched": True}
+
+    # Marketplace replaces this integration's files, not LocalTuya's template
+    # picker directory. Keep only a known, unchanged copy synchronized.
+    # Never modify LocalTuya device config entries or an edited template.
+    try:
+        template_state = await hass.async_add_executor_job(
+            sync_managed_template, Path(hass.config.config_dir)
+        )
+        _LOGGER.info("Venta LocalTuya template synchronization: %s", template_state)
+    except (OSError, RuntimeError, ValueError) as exc:
+        _LOGGER.warning("Venta LocalTuya template synchronization skipped: %s", exc)
 
     @callback
     def manual_reload(_):

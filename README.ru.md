@@ -5,7 +5,7 @@
 # Venta AW730
 
 [![Проверки CI](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml/badge.svg)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml)
-[![Версия 1.0.3](https://img.shields.io/badge/version-1.0.3-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
+[![Версия 1.0.4](https://img.shields.io/badge/version-1.0.4-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
 [![Home Assistant](https://img.shields.io/badge/Home_Assistant-2026.11%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
 [![Apple HomeKit](https://img.shields.io/badge/Apple-HomeKit-111111?logo=apple&logoColor=white)](https://www.home-assistant.io/integrations/homekit/)
 [![Алиса](https://img.shields.io/badge/Yandex-Alice-FFCC00)](https://docs.yaha-cloud.ru/)
@@ -31,13 +31,11 @@
 [![Добавить в Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dmitriy1ebedev&repository=venta-aw730-homeassistant&category=integration)
 <!-- ha-marketplace:exclude-end -->
 
-Шаблон уже входит в пакет: [`venta_aw730.yaml`](custom_components/venta_homekit_native/templates/venta_aw730.yaml). Чтобы он появился в списке шаблонов LocalTuya, выполните один раз **в терминале Home Assistant**:
+Шаблон [`venta_aw730.yaml`](custom_components/venta_homekit_native/templates/venta_aw730.yaml) уже в комплекте. После настройки Venta и запуска Home Assistant он автоматически появляется в LocalTuya. Добавьте устройство и выберите этот шаблон — скачивать его отдельно не нужно.
 
-```bash
-python3 /config/custom_components/venta_homekit_native/install_localtuya_template.py
-```
+Если вы добавляете устройство **до** настройки расширения Venta для HomeKit, один раз зарегистрируйте шаблон командой `python3 /config/custom_components/venta_homekit_native/install_localtuya_template.py` в терминале Home Assistant (для Container — через `docker exec`).
 
-При установке Home Assistant Container с хоста ту же команду можно выполнить через `docker exec homeassistant ...`. Теперь в LocalTuya добавьте устройство Venta и выберите шаблон `venta_aw730.yaml`. Команда не перезаписывает изменённый шаблон; для его замены предусмотрен `--replace` с созданием резервной копии.
+**Обновления:** после установки новой версии Venta через Marketplace и перезапуска Home Assistant неизменённый шаблон LocalTuya синхронизируется автоматически, прежняя копия сохраняется. Пользовательский шаблон не перезаписывается. Конфигурации ранее добавленных устройств хранятся в LocalTuya отдельно; изменения их сопоставлений требуют проверки. Учётные данные и идентификаторы сущностей автоматически не переписываются. Apple Home и Алиса используют **ту же существующую сущность увлажнителя**, без второго устройства.
 
 **Apple Home:** используйте существующий [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/) и добавьте [короткую настройку](examples/configuration.yaml.example) в `configuration.yaml`, заменив примеры идентификаторов своими. Проверьте конфигурацию и перезапустите Home Assistant. Уже подключённую Venta и сопряжение HomeKit удалять не нужно.
 

@@ -64,6 +64,91 @@ class BundleTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.module.install(Path(tmp))
 
+    def test_sync_without_localtuya_is_nonfatal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIn("skipped", self.module.sync_managed_template(Path(tmp)))
+
+    def test_sync_installs_and_records_managed_hash(self):
+        import hashlib
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp)
+            directory = config / "custom_components" / "localtuya" / "templates"
+            directory.mkdir(parents=True)
+            self.assertEqual(self.module.sync_managed_template(config), "installed")
+            destination = directory / "venta_aw730.yaml"
+            self.assertEqual(destination.read_bytes(), SOURCE.read_bytes())
+            marker = config / ".storage" / self.module.MARKER
+            self.assertEqual(
+                json.loads(marker.read_text())["destination_sha256"],
+                hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(self.module.sync_managed_template(config), "already current")
+
+    def test_sync_legacy_template_copies_and_backs_up(self):
+        legacy = SOURCE.read_text().replace("unit_of_measurement: μg/m³", "unit_of_measurement: ug/m3").replace(
+            "unit_of_measurement: d", "unit_of_measurement: days"
+        )
+        legacy = legacy.replace(
+            "friendly_name: Water Level\\n    entity_category: diagnostic\\n    unit_of_measurement: '%'\\n",
+            "friendly_name: Water Level\\n    entity_category: diagnostic\\n    unit_of_measurement: '%'\\n    device_class: duration\\n",
+        )
+        self.assertTrue(self.module._only_known_legacy_differences(
+            legacy.encode(), SOURCE.read_bytes()
+        ))
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp)
+            directory = config / "custom_components" / "localtuya" / "templates"
+            directory.mkdir(parents=True)
+            destination = directory / "venta_aw730.yaml"
+            destination.write_text(legacy)
+            self.assertIn("updated", self.module.sync_managed_template(config))
+            self.assertEqual(destination.read_bytes(), SOURCE.read_bytes())
+            backups = list(directory.glob("venta_aw730.yaml.*.bak"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_text(), legacy)
+
+    def test_sync_preserves_edited_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp)
+            directory = config / "custom_components" / "localtuya" / "templates"
+            directory.mkdir(parents=True)
+            self.module.sync_managed_template(config)
+            destination = directory / "venta_aw730.yaml"
+            changed = destination.read_text().replace(
+                "friendly_name: Temperature", "friendly_name: My Temperature"
+            )
+            destination.write_text(changed)
+            self.assertIn("modified template preserved", self.module.sync_managed_template(config))
+            self.assertEqual(destination.read_text(), changed)
+            self.assertFalse(list(directory.glob("venta_aw730.yaml.*.bak")))
+
+    def test_sync_upgrades_tracked_previous_release(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp)
+            directory = config / "custom_components" / "localtuya" / "templates"
+            directory.mkdir(parents=True)
+            self.module.sync_managed_template(config)
+            destination = directory / "venta_aw730.yaml"
+            old_content = SOURCE.read_bytes().replace(b"friendly_name: Temperature", b"friendly_name: Temp")
+            destination.write_bytes(old_content)
+            # Mimic a previous Marketplace release's checksum state.
+            self.module._save_managed_digest(config, old_content)
+            self.assertIn("updated", self.module.sync_managed_template(config))
+            self.assertEqual(destination.read_bytes(), SOURCE.read_bytes())
+            self.assertEqual(len(list(directory.glob("venta_aw730.yaml.*.bak"))), 1)
+
+    def test_sync_does_not_follow_template_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp)
+            directory = config / "custom_components" / "localtuya" / "templates"
+            directory.mkdir(parents=True)
+            real = config / "external.yaml"
+            real.write_text("untouched")
+            (directory / "venta_aw730.yaml").symlink_to(real)
+            self.assertIn("skipped", self.module.sync_managed_template(config))
+            self.assertEqual(real.read_text(), "untouched")
+
 
 if __name__ == "__main__":
     unittest.main()
