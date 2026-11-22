@@ -19,8 +19,13 @@ backup. Existing LocalTuya device config entries, entity IDs and credentials
 are never changed by template synchronization. No keys, cloud credentials or
 device secrets are bundled.
 
-The existing HomeKit humidifier accessory is patched only if its entity
-matches configuration.yaml. Bridge entry is resolved by title, no fixed ID.
+The HomeKit humidifier type registry is globally redirected through a narrowly
+scoped factory: the configured Venta entity uses the existing
+`VentaEnhancedHumidifier` subclass, while **every other humidifier uses the
+original Home Assistant `HumidifierDehumidifier` class**, without Venta linked
+services. The bridge entry is resolved by title, no fixed ID. Repeated setup
+is idempotent. Required native HomeKit/PyHAP methods are checked before registry
+mutation; incompatible versions fail closed without patching the registry.
 
 Main HumidifierDehumidifier target state: 0=Auto, 1=Humidify.
 Fanv2 linked service: TargetFanState Auto=1, Manual=0.
@@ -30,6 +35,10 @@ Linked Lightbulb: LED power/brightness.
 Linked TemperatureSensor: HA sensor state.
 The main humidity target is handled by HA's native HomeKit implementation.
 
-The integration relies on internal HomeKit and HAP-python APIs and uses a
-global HomeKit TYPES patch. Treat as an experiment, not a supported HA API.
-Do not install on a production system without first testing a backup.
+The integration still relies on internal HomeKit and HAP-python APIs and
+modifies the global `TYPES` registry; even with entity-scoped construction this
+is **not a supported HA extension API**. CI runs the real Home Assistant/PyHAP
+allocation algorithms on synthetic accessories to compare AID/IID identities
+across simulated reload/restart cycles. This does **not** test existing Apple
+Home pairings or a real running HomeKit server. No user pairings or `.storage`
+files may be deleted or rewritten as part of an upgrade test.

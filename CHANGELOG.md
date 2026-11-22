@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Route only the configured Venta entity to the enhanced HomeKit class; all other humidifiers retain the native HA class. Fail closed on missing HomeKit/PyHAP API contracts. Add isolated HomeKit AID/IID stability regressions (no pairing or live device).
 - Add an explicit, read-only `venta_homekit_native.log_diagnostics` service returning a sanitized JSON response in Developer Tools (and optionally logging at INFO) with allow-listed versions, entity availability, HomeKit Bridge state and safe follow-up codes; excludes secrets, identifiers, raw sensor data and network information.
 - Keep LocalTuya protocol error attribution separate from Home Assistant entity state; the service cannot infer handshake root causes.
 
