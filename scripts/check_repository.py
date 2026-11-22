@@ -27,6 +27,7 @@ def validate() -> list[str]:
         "docs/CI_SECURITY.md",
         "scripts/build_release.py",
         "scripts/stage_ha_runtime.py",
+        "scripts/ha_native_homekit_smoke.py",
         "hacs.json",
         ".github/CODEOWNERS",
         ".github/workflows/validate.yml",

@@ -12,7 +12,7 @@ Review baseline: 2026-11-22, local source after P01.1/P01.4, no device-side chan
 | Python | Syntax check, `unittest`, `scripts/check_repository.py` | Offline code and release structure checks |
 | JavaScript | Two dashboard files checked with Node syntax parser | Does not prove the UI behaves correctly in a browser |
 | Release layout | `scripts/build_release.py` and `tests/test_release_package.py` | Reproducible source package and isolated install-layout smoke; **not** real HA runtime |
-| Home Assistant / HACS | HACS, hassfest and an isolated Home Assistant 2026.11.1 container smoke run on GitHub runners | The container validates a synthetic YAML config from the exact packaged component; it cannot prove HomeKit pairing, physical-device control, or production startup |
+| Home Assistant / HACS | HACS, hassfest, isolated Home Assistant 2026.11.1 `check_config`, and a real HomeKit/PyHAP API compatibility smoke run on GitHub runners | The container validates a synthetic YAML config and calls the installed HomeKit base API with a fake device; it does not start a HomeKit server or prove HomeKit pairing, physical-device control, or production startup |
 | Attribution | `LICENSE` and `THIRD_PARTY_NOTICES.md` include upstream MIT license of adapted LocalTuya YAML | Keep notices when changing the template |
 
 ## Known limitations and open work
