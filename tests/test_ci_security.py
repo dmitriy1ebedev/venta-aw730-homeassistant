@@ -26,21 +26,24 @@ class CISecurityTests(unittest.TestCase):
                     self.assertRegex(uses, r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*@[0-9a-f]{40}$")
                     if uses.startswith("actions/checkout@"):
                         checkout_steps.append(step)
-        self.assertGreaterEqual(len(checkout_steps), 3)
+        self.assertGreaterEqual(len(checkout_steps), 4)
         for checkout in checkout_steps:
             self.assertIs(checkout["with"]["persist-credentials"], False)
 
     def test_all_expected_gates_are_present(self):
         jobs = self.workflow["jobs"]
-        self.assertTrue({"tests", "hacs", "hassfest"}.issubset(jobs))
+        self.assertTrue({"tests", "hacs", "hassfest", "ha_runtime_smoke"}.issubset(jobs))
         scripts = "\n".join(step.get("run", "") for step in jobs["tests"]["steps"])
         for required in (
             "compileall", "unittest discover", "scripts/check_repository.py",
             "venta-airwasher-card.js", "venta-more-info.js",
         ):
             self.assertIn(required, scripts)
-        for gate in ("hacs", "hassfest"):
+        for gate in ("hacs", "hassfest", "ha_runtime_smoke"):
             self.assertIn("dmitriy1ebedev/venta-aw730-homeassistant", jobs[gate]["if"])
+        smoke = "\\n".join(s.get("run", "") for s in jobs["ha_runtime_smoke"]["steps"])
+        for required in ("scripts/build_release.py", "scripts.stage_ha_runtime", "ghcr.io/home-assistant/home-assistant:2026.11.1", "--network none", "check_config --config /config"):
+            self.assertIn(required, smoke)
 
     def test_topic_exception_is_explicit_and_documented(self):
         hacs = self.workflow["jobs"]["hacs"]

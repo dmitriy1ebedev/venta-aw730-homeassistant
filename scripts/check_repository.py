@@ -26,6 +26,7 @@ def validate() -> list[str]:
         "docs/RELEASING.md",
         "docs/CI_SECURITY.md",
         "scripts/build_release.py",
+        "scripts/stage_ha_runtime.py",
         "hacs.json",
         ".github/CODEOWNERS",
         ".github/workflows/validate.yml",
