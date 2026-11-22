@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="custom_components/venta_homekit_native/brand/icon.png" alt="Venta AW730" width="112" height="112" />
+  <img src="assets/venta-aw730-banner.svg" alt="Venta AW730 air washer" width="100%" />
 </p>
 
-<h1 align="center">Venta AW730</h1>
+# Venta AW730
 
 [![Validation](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml/badge.svg)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml)
-[![Version 1.0](https://img.shields.io/badge/version-1.0-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
+[![Version 1.0.3](https://img.shields.io/badge/version-1.0.3-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
 [![Home Assistant](https://img.shields.io/badge/Home_Assistant-2026.11%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
 [![Apple HomeKit](https://img.shields.io/badge/Apple-HomeKit-111111?logo=apple&logoColor=white)](https://www.home-assistant.io/integrations/homekit/)
 [![Yandex Alice](https://img.shields.io/badge/Yandex-Alice-FFCC00)](https://docs.yaha-cloud.ru/)

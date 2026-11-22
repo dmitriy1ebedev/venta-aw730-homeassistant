@@ -32,6 +32,9 @@ def validate() -> list[str]:
         "custom_components/venta_homekit_native/manifest.json",
         "custom_components/venta_homekit_native/services.yaml",
         "custom_components/venta_homekit_native/brand/icon.png",
+        "custom_components/venta_homekit_native/brand/icon@2x.png",
+        "assets/venta-aw730-banner.svg",
+        "assets/venta-aw730-logo.svg",
         "custom_components/venta_homekit_native/templates/venta_aw730.yaml",
         "custom_components/venta_homekit_native/install_localtuya_template.py",
     )
@@ -85,8 +88,8 @@ def validate() -> list[str]:
     for name in ("README.md", "README.ru.md"):
         try:
             readme = (ROOT / name).read_text()
-            if "brand/icon.png" not in readme:
-                problems.append("README missing integration icon: " + name)
+            if "assets/venta-aw730-banner.svg" not in readme:
+                problems.append("README missing high-resolution banner: " + name)
             if "ha-marketplace:exclude-start" not in readme:
                 problems.append("README missing Marketplace-aware install link: " + name)
         except OSError as exc:
