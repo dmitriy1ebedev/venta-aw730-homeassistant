@@ -1,0 +1,64 @@
+name: Bug report / Ошибка
+description: Report a reproducible Venta AW730 issue
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please remove credentials, pairing data, serial numbers, IP addresses and account details from logs and screenshots.
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.11.0"
+    validations:
+      required: true
+  - type: input
+    id: localtuya_version
+    attributes:
+      label: LocalTuya version
+    validations:
+      required: true
+  - type: dropdown
+    id: affected
+    attributes:
+      label: Affected layer
+      options:
+        - Device / Tuya LAN
+        - LocalTuya
+        - Home Assistant / Marketplace
+        - Apple Home / Siri
+        - Alice / Yandex
+        - Dashboard
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include what worked before and what fails now.
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior (redacted logs only)
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed local keys, tokens, private IP/MAC and pairing information.
+          required: true

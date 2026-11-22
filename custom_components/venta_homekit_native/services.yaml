@@ -1,0 +1,5 @@
+reload_venta:
+  name: Reload Venta AW730
+  description: >-
+    Rebuilds only the existing Venta AW730 accessory inside HomeKit Bridge,
+    without resetting HomeKit pairings or restarting Home Assistant.

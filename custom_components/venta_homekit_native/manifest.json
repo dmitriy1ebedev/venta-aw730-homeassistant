@@ -1,0 +1,19 @@
+{
+  "domain": "venta_homekit_native",
+  "name": "Venta AW730",
+  "categories": [
+    "sensors.air_quality",
+    "sensors.temperature_humidity"
+  ],
+  "codeowners": [
+    "@dmitriy1ebedev"
+  ],
+  "dependencies": [
+    "homekit"
+  ],
+  "documentation": "https://github.com/dmitriy1ebedev/venta-aw730-homeassistant",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/issues",
+  "version": "1.0.2"
+}

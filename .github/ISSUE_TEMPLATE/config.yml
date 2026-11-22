@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation / Документация
+    url: https://github.com/dmitriy1ebedev/venta-aw730-homeassistant#readme
+    about: Check installation instructions before creating an issue.
+  - name: Vulnerability reporting / Безопасность
+    url: https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/security
+    about: Report security problems privately where supported; never post secrets in public.
