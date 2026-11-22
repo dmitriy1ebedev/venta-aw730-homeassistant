@@ -1,6 +1,6 @@
 # Agent instructions — Venta AW730
 
-Read [README.md](README.md), [architecture](docs/architecture.md) and [security policy](SECURITY.md) before editing. These rules apply to the entire repository.
+Read [ROADMAP.md](ROADMAP.md), [README.md](README.md), [architecture](docs/architecture.md) and [security policy](SECURITY.md) before editing. These rules apply to the entire repository.
 
 ## Scope and compatibility
 
