@@ -31,6 +31,14 @@
           "confirm_temperature": "Я проверил тип датчика температуры",
           "confirm_humidity": "Я проверил тип датчика влажности"
         }
+      },
+      "reconfigure": {
+        "title": "Применить проверенные изменения Venta после резервной копии",
+        "description": "Текущий аксессуар HomeKit не меняется на ходу. Можно изменить лишь привязки функций LocalTuya на прежнем мосту. Сначала проверьте резервную копию. Нужен ручной перезапуск Home Assistant; смена моста требует отдельного испытания.",
+        "data": {
+          "confirm_backup": "Резервная копия Home Assistant создана и проверена",
+          "confirm_manual_restart": "Я вручную перезапущу Home Assistant после сохранения"
+        }
       }
     },
     "error": {
@@ -38,8 +46,10 @@
       "yaml_migration_entities_changed": "Привязанные сущности изменились. Перенос остановлен.",
       "invalid_humidifier": "Выбранный увлажнитель LocalTuya недоступен.",
       "bridge_unavailable": "Выбранный мост HomeKit недоступен.",
-      "bridge_excludes_humidifier": "Увлажнитель не включён в выбранный мост HomeKit.",
-      "invalid_entity": "Сущность отсутствует, изменилась или принадлежит другому устройству."
+      "bridge_excludes_humidifier": "Мост HomeKit исключает этот увлажнитель.",
+      "invalid_entity": "Сущность недоступна или принадлежит другому устройству.",
+      "restart_confirmation_required": "Подтвердите резервную копию и ручной перезапуск.",
+      "staging_confirmation_required": "Подтвердите сохранение только предложения."
     },
     "abort": {
       "yaml_migration_unavailable": "Нет действующей YAML-конфигурации для переноса.",
@@ -49,7 +59,69 @@
       "homekit_bridge_missing": "Мост HomeKit не найден.",
       "bridge_unavailable": "Выбранный мост HomeKit недоступен.",
       "bridge_excludes_humidifier": "Мост HomeKit исключает этот увлажнитель.",
-      "required_entities_missing": "Не найдены все обязательные сущности."
+      "required_entities_missing": "Не найдены все обязательные сущности.",
+      "yaml_or_other_owner": "Действующая привязка HomeKit принадлежит YAML или другой записи.",
+      "no_valid_review_proposal": "Сначала сохраните актуальное предложение в параметрах интеграции.",
+      "wrong_humidifier": "Менять идентичность увлажнителя нельзя.",
+      "bridge_change_requires_canary": "Смена HomeKit-моста требует отдельного согласованного испытания для сохранения сопряжения.",
+      "no_changes": "Изменений привязок нет.",
+      "staged_entities_changed": "Связанная сущность изменилась после проверки. Проверьте предложение заново.",
+      "restart_required_for_reconfigure": "Изменения сохранены для следующего запуска Home Assistant. Действующий HomeKit не изменён. Перезапустите HA вручную после проверки резервной копии."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Проверка моста и связанных сущностей Venta",
+        "description": "Выберите существующий мост HomeKit и пять функций LocalTuya. Сохранение только подготовит предложение, не меняя работу прибора и Apple Home. Безопасные изменения на прежнем мосту применяются через «Перенастроить» после проверки резервной копии.",
+        "data": {
+          "bridge_entry_id": "Мост HomeKit",
+          "fan_entity": "Скорость вентилятора",
+          "led_entity": "Питание подсветки",
+          "brightness_entity": "Яркость подсветки",
+          "temperature_entity": "Температура",
+          "humidity_entity": "Влажность",
+          "confirm_temperature": "Я проверил тип датчика температуры",
+          "confirm_humidity": "Я проверил тип датчика влажности",
+          "confirm_staging": "Я понимаю, что сохраняется только предложение"
+        }
+      }
+    },
+    "error": {
+      "staging_confirmation_required": "Подтвердите сохранение только предложения.",
+      "invalid_entity": "Сущность недоступна или принадлежит другому устройству.",
+      "bridge_unavailable": "Выбранный мост HomeKit недоступен.",
+      "bridge_excludes_humidifier": "Мост HomeKit исключает этот увлажнитель."
+    },
+    "abort": {
+      "yaml_or_other_owner": "Действующая привязка HomeKit принадлежит YAML или другой записи.",
+      "localtuya_humidifier_missing": "Не найден увлажнитель LocalTuya.",
+      "required_entities_missing": "Не найдены все связанные сущности.",
+      "bridge_unavailable": "Выбранный мост HomeKit недоступен."
+    }
+  },
+  "issues": {
+    "binding_unavailable": {
+      "title": "Нужно проверить привязку Venta к HomeKit",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Проверка восстановленных сущностей Venta",
+            "description": "Восстановите прежние сущности LocalTuya и тот же мост HomeKit. Проверка не изменяет настройки, не включает прибор и не выполняет сопряжение Apple Home. После успешной проверки при необходимости перезапустите Home Assistant вручную.",
+            "data": {
+              "confirm_review": "Я проверил прежние сущности и мост"
+            }
+          }
+        },
+        "error": {
+          "binding_not_restored": "Прежние сущности или мост отсутствуют либо изменились.",
+          "review_confirmation_required": "Подтвердите проверку исходной привязки."
+        },
+        "abort": {
+          "entry_missing": "Запись конфигурации Venta не найдена.",
+          "yaml_or_other_owner": "Действующей привязкой владеет YAML или другая запись."
+        }
+      }
     }
   }
 }

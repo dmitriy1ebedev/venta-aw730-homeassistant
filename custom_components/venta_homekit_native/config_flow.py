@@ -9,6 +9,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 
 from . import DOMAIN
@@ -307,5 +308,97 @@ class VentaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="migrate_yaml",
             data_schema=vol.Schema(schema),
+            errors=errors,
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Offer a safe, non-applying review of an existing UI config entry."""
+        from .options_flow import VentaOptionsFlow
+
+        return VentaOptionsFlow()
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        """Commit a reviewed same-bridge binding for the NEXT HA restart.
+
+        No reload, HomeKit dispatch, accessory recreation or LocalTuya calls
+        occur in this flow. A different bridge would change Apple Home
+        identity and is deliberately rejected, even if its name is identical.
+        """
+        from .binding_review import (
+            BRIDGE, SOURCE, ROLE_FIELDS, mapping_changed, review_proposal,
+        )
+        from .options_flow import PROPOSAL, SOURCE_SNAPSHOT, binding_snapshot
+
+        entry = self._get_reconfigure_entry()
+        current = dict(entry.data)
+        active = self.hass.data.get(DOMAIN, {})
+        if active.get("patched") and active.get("config_entry_id") != entry.entry_id:
+            return self.async_abort(reason="yaml_or_other_owner")
+
+        options = dict(entry.options)
+        proposal = options.get(PROPOSAL)
+        if not isinstance(proposal, dict) or (
+            options.get(SOURCE_SNAPSHOT) != binding_snapshot(current)
+        ):
+            return self.async_abort(reason="no_valid_review_proposal")
+        if proposal.get(SOURCE) != current.get(SOURCE):
+            return self.async_abort(reason="wrong_humidifier")
+        if proposal.get(BRIDGE) != current.get(BRIDGE):
+            return self.async_abort(reason="bridge_change_requires_canary")
+        if not mapping_changed(current, proposal):
+            return self.async_abort(reason="no_changes")
+
+        selections = {
+            role: proposal.get(f"{role}_entity") for role in ROLES
+        }
+        try:
+            confirmed = frozenset(proposal.get("confirmed_unclassified", []))
+            problems, refreshed = review_proposal(
+                self.hass, current, proposal.get(BRIDGE), selections,
+                confirmed_unclassified=confirmed,
+            )
+        except (TypeError, ValueError):
+            return self.async_abort(reason="staged_entities_changed")
+        if problems or refreshed is None or any(
+            proposal.get(key) != refreshed.get(key)
+            for key in (SOURCE, BRIDGE, *ROLE_FIELDS)
+        ):
+            return self.async_abort(reason="staged_entities_changed")
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if (
+                user_input.get("confirm_backup") is not True
+                or user_input.get("confirm_manual_restart") is not True
+            ):
+                errors["base"] = "restart_confirmation_required"
+            else:
+                await self.async_set_unique_id(current[SOURCE])
+                self._abort_if_unique_id_mismatch()
+                # A config-entry update must not retarget a running HAP
+                # accessory. A fresh HA process applies the new role IDs.
+                active = self.hass.data.get(DOMAIN, {})
+                if active.get("patched") and active.get("config_entry_id") != entry.entry_id:
+                    return self.async_abort(reason="yaml_or_other_owner")
+                new_options = dict(options)
+                new_options.pop(PROPOSAL, None)
+                new_options.pop(SOURCE_SNAPSHOT, None)
+                self.hass.config_entries.async_update_entry(
+                    entry,
+                    data={**current, **refreshed},
+                    options=new_options,
+                )
+                return self.async_abort(reason="restart_required_for_reconfigure")
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema({
+                vol.Required("confirm_backup", default=False): bool,
+                vol.Required("confirm_manual_restart", default=False): bool,
+            }),
             errors=errors,
         )

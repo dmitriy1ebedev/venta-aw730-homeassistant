@@ -31,15 +31,25 @@
           "confirm_temperature": "I verified the temperature sensor type",
           "confirm_humidity": "I verified the humidity sensor type"
         }
+      },
+      "reconfigure": {
+        "title": "Apply reviewed Venta changes after a backup",
+        "description": "The existing HomeKit accessory is not changed live. Only its saved LocalTuya role mappings can change, and only on the same bridge. Save a verified backup first. A manual Home Assistant restart is required; bridge switching needs a separate canary.",
+        "data": {
+          "confirm_backup": "I created and verified a Home Assistant backup",
+          "confirm_manual_restart": "I will restart Home Assistant manually after saving"
+        }
       }
     },
     "error": {
       "yaml_migration_confirmation_required": "Confirm backup and restart steps to migrate.",
       "yaml_migration_entities_changed": "The linked entities changed. Migration was stopped.",
       "invalid_humidifier": "The selected LocalTuya humidifier is no longer available.",
-      "bridge_unavailable": "The selected bridge is unavailable.",
-      "bridge_excludes_humidifier": "The existing HomeKit bridge does not include this humidifier.",
-      "invalid_entity": "The selected entity is missing, changed, or belongs to another device."
+      "bridge_unavailable": "The selected HomeKit bridge is not available.",
+      "bridge_excludes_humidifier": "The HomeKit bridge excludes this humidifier.",
+      "invalid_entity": "The selected entity is unavailable or belongs to another device.",
+      "restart_confirmation_required": "Confirm the backup and manual restart before saving.",
+      "staging_confirmation_required": "Confirm that this only stages a proposal."
     },
     "abort": {
       "yaml_migration_unavailable": "No active YAML configuration is available to migrate.",
@@ -49,7 +59,69 @@
       "homekit_bridge_missing": "No existing HomeKit bridge was found.",
       "bridge_unavailable": "The selected HomeKit bridge is no longer available.",
       "bridge_excludes_humidifier": "The selected HomeKit bridge excludes this humidifier.",
-      "required_entities_missing": "One or more required entities are missing."
+      "required_entities_missing": "One or more required entities are missing.",
+      "yaml_or_other_owner": "The current Venta HomeKit binding is owned by YAML or another entry.",
+      "no_valid_review_proposal": "Stage a current proposal in Options before reconfiguring.",
+      "wrong_humidifier": "Changing the humidifier identity is not allowed.",
+      "bridge_change_requires_canary": "Moving to another HomeKit bridge requires a separately approved migration; pairing is preserved.",
+      "no_changes": "No binding changes were proposed.",
+      "staged_entities_changed": "A linked entity changed since the proposal was staged. Review it again.",
+      "restart_required_for_reconfigure": "Saved for the next Home Assistant restart. The current HomeKit accessory was not changed. Restart manually after verifying your backup."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Review Venta bridge and linked entities",
+        "description": "Choose the existing HomeKit bridge and all five LocalTuya roles. Saving only stages a proposal; it does not alter the running device or Apple Home. To apply a safe same-bridge change, use Reconfigure after reviewing a backup.",
+        "data": {
+          "bridge_entry_id": "HomeKit bridge",
+          "fan_entity": "Fan speed",
+          "led_entity": "LED power",
+          "brightness_entity": "LED brightness",
+          "temperature_entity": "Temperature",
+          "humidity_entity": "Humidity",
+          "confirm_temperature": "I verified the temperature sensor type",
+          "confirm_humidity": "I verified the humidity sensor type",
+          "confirm_staging": "I understand this only stages a proposal"
+        }
+      }
+    },
+    "error": {
+      "staging_confirmation_required": "Confirm that this only stages a proposal.",
+      "invalid_entity": "The selected entity is unavailable or belongs to another device.",
+      "bridge_unavailable": "The selected HomeKit bridge is not available.",
+      "bridge_excludes_humidifier": "The HomeKit bridge excludes this humidifier."
+    },
+    "abort": {
+      "yaml_or_other_owner": "The current Venta HomeKit binding is owned by YAML or another entry.",
+      "localtuya_humidifier_missing": "LocalTuya humidifier not found.",
+      "required_entities_missing": "Required linked entities missing.",
+      "bridge_unavailable": "The selected HomeKit bridge is not available."
+    }
+  },
+  "issues": {
+    "binding_unavailable": {
+      "title": "Venta HomeKit link needs attention",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Check restored Venta entities",
+            "description": "Restore the original LocalTuya entities and existing HomeKit bridge. This check never edits mappings, starts devices or re-pairs Apple Home. If valid, finish and manually restart Home Assistant if the configuration entry remains unavailable.",
+            "data": {
+              "confirm_review": "I verified the original entities and bridge"
+            }
+          }
+        },
+        "error": {
+          "binding_not_restored": "The original entities or bridge are still missing or changed.",
+          "review_confirmation_required": "Confirm review of the original mapping."
+        },
+        "abort": {
+          "entry_missing": "This Venta configuration entry no longer exists.",
+          "yaml_or_other_owner": "The active bridge is owned by YAML or another entry."
+        }
+      }
     }
   }
 }

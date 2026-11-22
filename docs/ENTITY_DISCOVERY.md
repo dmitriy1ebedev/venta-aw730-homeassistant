@@ -64,10 +64,16 @@ Automated `SOURCE_IMPORT` is rejected rather than silently creating a new
 bridge or duplicate entry. Synthetic migration tests are not a live HA
 restore test.
 
-**Still pending:** V120-03 disposable restart/rollback acceptance,
-options/reconfigure/repairs (P03.4), safe live unload, complete disposable
-runtime acceptance and an owner-approved production canary (P03.5).
-A green synthetic smoke does not authorize production rollout.
+**V120-04 stacked candidate:** Options reviews and stores an inert proposal;
+Reconfigure can save validated same-bridge roles only with explicit backup and
+restart acknowledgements; Repairs verifies restored original bindings without
+guessing entities, restarting HA or resetting HomeKit. See
+[Options and Repairs](OPTIONS_AND_REPAIRS.md). New issues contain only a
+fixed reason and a config-entry reference, never physical device credentials.
+
+**Still pending:** V120-03 disposable restart/rollback acceptance, V120-04
+end-to-end restart/repair acceptance, safe live unload, and an owner-approved
+production canary (P03.5). A green synthetic smoke does not authorize rollout.
 No saved device IDs, LocalTuya local keys or pairing data should be placed in
 test fixtures, logs or GitHub issues.
 

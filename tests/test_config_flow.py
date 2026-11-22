@@ -44,6 +44,13 @@ class FakeConfigFlow:
         if self.existing_entries:
             raise AssertionError("duplicate entry must be rejected sooner")
 
+    def _get_reconfigure_entry(self):
+        return self.reconfigure_entry
+
+    def _abort_if_unique_id_mismatch(self):
+        if self.unique_id != self.reconfigure_entry.unique_id:
+            raise AssertionError("reconfigure must never switch humidifiers")
+
     def async_show_form(self, *, step_id, data_schema, errors):
         return {
             "type": "form", "step_id": step_id,
@@ -67,7 +74,11 @@ class VentaFlowTests(unittest.TestCase):
         ha.__path__ = []
         ha_config = types.ModuleType("homeassistant.config_entries")
         ha_config.ConfigFlow = FakeConfigFlow
+        ha_config.OptionsFlow = FakeConfigFlow
         ha.config_entries = ha_config
+        ha_core = types.ModuleType("homeassistant.core")
+        ha_core.callback = lambda fn: fn
+        ha.core = ha_core
         helpers = types.ModuleType("homeassistant.helpers")
         helpers.__path__ = []
         registry_module = types.ModuleType("homeassistant.helpers.entity_registry")
@@ -91,6 +102,7 @@ class VentaFlowTests(unittest.TestCase):
             pkg.__name__: pkg,
             "homeassistant": ha,
             "homeassistant.config_entries": ha_config,
+            "homeassistant.core": ha_core,
             "homeassistant.helpers": helpers,
             "homeassistant.helpers.entity_registry": registry_module,
             "voluptuous": vol,
@@ -137,6 +149,14 @@ class VentaFlowTests(unittest.TestCase):
                 ),
             ),
         )
+        self.entry_updates = []
+
+        def update_entry(entry, *, data, options):
+            self.entry_updates.append((entry, dict(data), dict(options)))
+            entry.data = data
+            entry.options = options
+
+        self.hass.config_entries.async_update_entry = update_entry
         self.flow = self.module.VentaConfigFlow()
         self.flow.hass = self.hass
         self.mapping = {
@@ -376,6 +396,215 @@ class VentaFlowTests(unittest.TestCase):
         self.assertEqual(
             self.migrate()["reason"], "yaml_migration_unavailable"
         )
+
+
+    def make_configured_entry(self):
+        data = {
+            "humidifier_entity": "humidifier.venta_fixture",
+            "bridge_entry_id": "existing-bridge",
+            "bridge_title": "Existing HomeKit Bridge",
+            "confirmed_unclassified": [],
+            **self.mapping,
+        }
+        entry = SimpleNamespace(
+            entry_id="venta-ui-config-entry", data=data, options={},
+            unique_id="humidifier.venta_fixture",
+        )
+        self.flow.reconfigure_entry = entry
+        self.hass.data[DOMAIN] = {
+            "patched": True, "config_entry_id": entry.entry_id,
+            "config_entry_data": dict(data),
+        }
+        options = self.module.VentaConfigFlow.async_get_options_flow(entry)
+        options.hass = self.hass
+        options.config_entry = entry
+        return entry, options
+
+    def stage_options(self, options, **changes):
+        choices = {
+            "bridge_entry_id": "existing-bridge",
+            **self.mapping, **changes,
+            "confirm_staging": True,
+        }
+        return self.run_flow(options.async_step_init(choices))
+
+    def test_options_flow_lists_existing_bridge_and_roles(self):
+        entry, options = self.make_configured_entry()
+        opening = self.run_flow(options.async_step_init())
+        self.assertEqual(opening["step_id"], "init")
+        self.assertIn("bridge_entry_id", opening["schema"])
+        self.assertTrue(all(key in opening["schema"] for key in self.mapping))
+        self.assertEqual(entry.options, {})
+        self.assertEqual(self.entry_updates, [])
+
+    def test_options_confirmation_required_before_staging(self):
+        entry, options = self.make_configured_entry()
+        self.entities["switch.alternative_led"] = entity("switch.alternative_led")
+        bad = self.run_flow(options.async_step_init({
+            "bridge_entry_id": "existing-bridge",
+            **self.mapping, "led_entity": "switch.alternative_led",
+            "confirm_staging": False,
+        }))
+        self.assertEqual(
+            bad["errors"]["base"], "staging_confirmation_required"
+        )
+        self.assertEqual(entry.options, {})
+        self.assertEqual(self.entry_updates, [])
+
+    def test_options_proposal_is_inert_and_preserves_pairing(self):
+        entry, options = self.make_configured_entry()
+        self.entities["switch.alternative_led"] = entity("switch.alternative_led")
+        saved = dict(entry.data)
+        result = self.stage_options(options, led_entity="switch.alternative_led")
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(
+            result["data"]["review_proposal"]["led_entity"],
+            "switch.alternative_led",
+        )
+        self.assertEqual(
+            result["data"]["review_source"]["led_entity"], "switch.led_power"
+        )
+        self.assertEqual(entry.data, saved)
+        self.assertEqual(self.hass.data[DOMAIN]["config_entry_data"], saved)
+        self.assertEqual(self.entry_updates, [])
+
+    def test_invalid_cross_device_proposal_does_not_stage(self):
+        entry, options = self.make_configured_entry()
+        self.entities["switch.other_device_led"] = entity(
+            "switch.other_device_led", device="other-device"
+        )
+        result = self.stage_options(options, led_entity="switch.other_device_led")
+        self.assertEqual(result["errors"]["led_entity"], "invalid_entity")
+        self.assertEqual(entry.options, {})
+
+    def test_options_bridge_excluded_disallows_staging(self):
+        entry, options = self.make_configured_entry()
+        self.bridges[0].options["filter"] = {
+            "include_entities": ["light.other"]
+        }
+        result = self.stage_options(options)
+        self.assertEqual(
+            result["errors"]["bridge_entry_id"],
+            "bridge_excludes_humidifier",
+        )
+        self.assertEqual(entry.options, {})
+
+    def test_options_without_change_discards_previous_proposal_only(self):
+        entry, options = self.make_configured_entry()
+        entry.options = {
+            "review_proposal": {"foo": "bar"},
+            "review_source": {"foo": "bar"},
+            "unrelated": 123,
+        }
+        result = self.stage_options(options)
+        self.assertEqual(result["data"], {"unrelated": 123})
+
+    def test_options_yaml_owner_prevents_review(self):
+        entry, options = self.make_configured_entry()
+        self.hass.data[DOMAIN] = {"patched": True}
+        self.assertEqual(
+            self.run_flow(options.async_step_init())["reason"],
+            "yaml_or_other_owner",
+        )
+        self.assertEqual(self.entry_updates, [])
+
+    def test_options_missing_role_aborts_without_device_calls(self):
+        entry, options = self.make_configured_entry()
+        self.entities.pop("switch.led_power")
+        self.assertEqual(
+            self.run_flow(options.async_step_init())["reason"],
+            "required_entities_missing",
+        )
+        self.assertEqual(self.entry_updates, [])
+
+    def test_reconfigure_requires_staged_review_and_two_confirmations(self):
+        entry, options = self.make_configured_entry()
+        self.assertEqual(
+            self.run_flow(self.flow.async_step_reconfigure())["reason"],
+            "no_valid_review_proposal",
+        )
+        self.entities["switch.alternative_led"] = entity("switch.alternative_led")
+        stage = self.stage_options(options, led_entity="switch.alternative_led")
+        entry.options = stage["data"]
+        prompt = self.run_flow(self.flow.async_step_reconfigure())
+        self.assertEqual(prompt["step_id"], "reconfigure")
+        missing = self.run_flow(self.flow.async_step_reconfigure({
+            "confirm_backup": True,
+            "confirm_manual_restart": False,
+        }))
+        self.assertEqual(
+            missing["errors"]["base"], "restart_confirmation_required",
+        )
+        self.assertEqual(self.entry_updates, [])
+
+    def test_reconfigure_updates_entry_but_never_running_homekit_binding(self):
+        entry, options = self.make_configured_entry()
+        self.entities["switch.alternative_led"] = entity("switch.alternative_led")
+        old = dict(entry.data)
+        staged = self.stage_options(options, led_entity="switch.alternative_led")
+        entry.options = staged["data"]
+        result = self.run_flow(self.flow.async_step_reconfigure({
+            "confirm_backup": True,
+            "confirm_manual_restart": True,
+        }))
+        self.assertEqual(result["reason"], "restart_required_for_reconfigure")
+        self.assertEqual(len(self.entry_updates), 1)
+        self.assertEqual(entry.data["led_entity"], "switch.alternative_led")
+        self.assertNotIn("review_proposal", entry.options)
+        self.assertEqual(self.hass.data[DOMAIN]["config_entry_data"], old)
+        self.assertEqual(self.hass.data[DOMAIN]["patched"], True)
+        self.assertEqual(self.flow.unique_id, old["humidifier_entity"])
+
+    def test_reconfigure_refuses_switching_homekit_bridge(self):
+        entry, options = self.make_configured_entry()
+        self.bridges.append(SimpleNamespace(
+            entry_id="other-bridge", title="Also HomeKit",
+            options={"mode": "bridge", "filter": {
+                "include_entities": ["humidifier.venta_fixture"]}},
+        ))
+        staged = self.stage_options(options, bridge_entry_id="other-bridge")
+        self.assertEqual(staged["type"], "create_entry")
+        entry.options = staged["data"]
+        self.assertEqual(
+            self.run_flow(self.flow.async_step_reconfigure({
+                "confirm_backup": True, "confirm_manual_restart": True,
+            }))["reason"],
+            "bridge_change_requires_canary",
+        )
+        self.assertEqual(self.entry_updates, [])
+
+    def test_reconfigure_rejects_stale_source_before_update(self):
+        entry, options = self.make_configured_entry()
+        self.entities["switch.alternative_led"] = entity("switch.alternative_led")
+        staged = self.stage_options(options, led_entity="switch.alternative_led")
+        entry.options = staged["data"]
+        entry.data = dict(entry.data, brightness_entity="select.other_brightness")
+        self.assertEqual(
+            self.run_flow(self.flow.async_step_reconfigure())["reason"],
+            "no_valid_review_proposal",
+        )
+        self.assertEqual(self.entry_updates, [])
+
+    def test_reconfigure_rejects_live_registry_rebinding(self):
+        entry, options = self.make_configured_entry()
+        self.entities["switch.alternative_led"] = entity("switch.alternative_led")
+        staged = self.stage_options(options, led_entity="switch.alternative_led")
+        entry.options = staged["data"]
+        self.entities["switch.alternative_led"].device_id = "other-device"
+        self.assertEqual(
+            self.run_flow(self.flow.async_step_reconfigure())["reason"],
+            "staged_entities_changed",
+        )
+        self.assertEqual(self.entry_updates, [])
+
+    def test_reconfigure_rejects_yaml_parallel_owner(self):
+        entry, options = self.make_configured_entry()
+        self.hass.data[DOMAIN] = {"patched": True}
+        self.assertEqual(
+            self.run_flow(self.flow.async_step_reconfigure())["reason"],
+            "yaml_or_other_owner",
+        )
+        self.assertEqual(self.entry_updates, [])
 
 
 if __name__ == "__main__":
