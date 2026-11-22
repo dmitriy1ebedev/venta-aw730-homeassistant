@@ -5,13 +5,19 @@ Venta AW730 --(Tuya LAN 3.4 / LocalTuya)--> Home Assistant humidifier
 
 Optional: HA humidifier -> Yaha Cloud -> Yandex Smart Home / Alice
 
-Marketplace manages only `custom_components/venta_homekit_native/`, not LocalTuya.
-This integration ships `templates/venta_aw730.yaml` inside its own folder.
-`install_localtuya_template.py` copies that file into LocalTuya's templates
-folder only on explicit invocation, with idempotency and backup on --replace.
-No keys, cloud credentials or device secrets are bundled. The template remains
-updated with new Marketplace releases; run the installer again to synchronize
-a previously installed LocalTuya template, if needed.
+Marketplace manages `custom_components/venta_homekit_native/`, not LocalTuya's files.
+This integration bundles `templates/venta_aw730.yaml` and calls
+`sync_managed_template` once during its Home Assistant setup. The synchronization
+copies a missing template and updates an unchanged, previously managed copy or
+a recognized older official copy. A previous copy is backed up when replaced;
+unknown or locally customized templates are preserved. The managed SHA-256 marker
+is stored in Home Assistant `.storage/venta_homekit_native.template.json`.
+LocalTuya must already be installed for synchronization to work.
+A manual option remains: run `install_localtuya_template.py` to install a missing
+template; a different existing template requires explicit `--replace`, with
+backup. Existing LocalTuya device config entries, entity IDs and credentials
+are never changed by template synchronization. No keys, cloud credentials or
+device secrets are bundled.
 
 The existing HomeKit humidifier accessory is patched only if its entity
 matches configuration.yaml. Bridge entry is resolved by title, no fixed ID.

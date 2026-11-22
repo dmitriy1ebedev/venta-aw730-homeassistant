@@ -26,7 +26,9 @@ Normal PRs and commits should remain auditable. Rewriting a public branch is exc
 
 ## Updating the bundled LocalTuya template
 
-A Marketplace update replaces the integration folder. The separate installed LocalTuya template is intentionally not overwritten. After template changes, users may rerun `install_localtuya_template.py`; differing existing templates require `--replace` and a backup. Test both paths.
+Marketplace replaces the Venta integration folder but does not directly manage LocalTuya files. After updating and restarting Home Assistant, Venta's `async_setup` invokes `sync_managed_template`: it installs a missing template, and replaces only a byte-for-byte unchanged previously managed copy or a recognized older official copy. Before any automatic replacement it backs up the previous template and updates its SHA-256 tracking marker under `.storage/`. Customized/unknown templates and symlinks are preserved and explicitly reported as skipped. When LocalTuya is absent, synchronization is safely skipped.
+
+For a manual install before Venta setup, run `install_localtuya_template.py`. A different existing file is refused unless the user explicitly supplies `--replace`, which makes a backup. Neither automatic nor manual template synchronization modifies existing LocalTuya config entries, device DP mappings, local keys, entity IDs or HomeKit pairings. Test these cases in isolation before a new release.
 
 ## CI expectations
 
