@@ -155,8 +155,38 @@ def validate(config: Path, expected_ha_version: str) -> dict:
             assert hass.executor_calls == 1
             assert hass.scheduled == []
 
+    async def verify_yaml_boundary():
+        legacy = {
+            key: value for key, value in values.items()
+            if key not in (
+                "bridge_entry_id", "confirmed_unclassified",
+            )
+        }
+        old_hass = FakeHass(bridge)
+        migrate_entry = SimpleNamespace(
+            entry_id="ci-yaml-transfer",
+            data=dict(values, migration_from_yaml=True),
+        )
+        with (
+            patch.object(er, "async_get", return_value=registry),
+            patch.object(
+                er, "async_entries_for_device", return_value=registry_entities
+            ),
+        ):
+            assert await venta.async_setup(old_hass, {venta.DOMAIN: legacy})
+            assert old_hass.data[venta.DOMAIN]["legacy_yaml"] == {
+                **legacy, "bridge_entry_id": bridge.entry_id,
+            }
+            assert not await venta.async_setup_entry(old_hass, migrate_entry)
+            assert old_hass.data[venta.DOMAIN].get("config_entry_id") is None
+            assert venta.BRIDGE_ENTRY == bridge.entry_id
+            assert old_hass.executor_calls == 1
+            assert len(old_hass.services.registered) == 2
+
     try:
         asyncio.run(exercise())
+        TYPES["HumidifierDehumidifier"] = original
+        asyncio.run(verify_yaml_boundary())
     finally:
         TYPES["HumidifierDehumidifier"] = original
     assert TYPES["HumidifierDehumidifier"] is NativeHumidifier

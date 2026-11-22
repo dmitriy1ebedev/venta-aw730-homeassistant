@@ -83,7 +83,7 @@ class VentaFlowTests(unittest.TestCase):
 
         vol = types.ModuleType("voluptuous")
         vol.Schema = lambda schema: schema
-        vol.Required = lambda key: key
+        vol.Required = lambda key, default=None: key
         vol.Optional = lambda key, default=None: key
         vol.In = lambda values: values
 
@@ -280,6 +280,102 @@ class VentaFlowTests(unittest.TestCase):
         self.assertEqual(bad["type"], "form")
         good = self.run_flow(self.flow.async_step_entities(self.mapping))
         self.assertEqual(good["type"], "create_entry")
+
+
+    def legacy_yaml_fixture(self):
+        values = {
+            "humidifier_entity": "humidifier.venta_fixture",
+            "bridge_title": "Existing HomeKit Bridge",
+            "bridge_entry_id": "existing-bridge",
+            **self.mapping,
+        }
+        self.hass.data[DOMAIN] = {
+            "patched": True,
+            "legacy_yaml": values,
+        }
+        return values
+
+    def migrate(self, **changes):
+        return self.run_flow(self.flow.async_step_migrate_yaml({
+            "confirm_backup": True,
+            "confirm_remove_yaml_and_restart": True,
+            **changes,
+        }))
+
+    def test_active_yaml_offers_migration_instead_of_duplicate_wizard(self):
+        self.legacy_yaml_fixture()
+        r = self.run_flow(self.flow.async_step_user())
+        self.assertEqual((r["type"], r["step_id"]), ("form", "migrate_yaml"))
+        self.assertNotIn("humidifier_entity", r["schema"])
+
+    def test_automatic_yaml_import_aborts_without_writing(self):
+        self.legacy_yaml_fixture()
+        r = self.run_flow(self.flow.async_step_import({}))
+        self.assertEqual(r["reason"], "interactive_yaml_migration_required")
+
+    def test_migration_requires_both_explicit_confirmations(self):
+        self.legacy_yaml_fixture()
+        bad = self.run_flow(self.flow.async_step_migrate_yaml({
+            "confirm_backup": True,
+            "confirm_remove_yaml_and_restart": False,
+        }))
+        self.assertEqual(bad["type"], "form")
+        self.assertEqual(bad["errors"]["base"], "yaml_migration_confirmation_required")
+        self.assertIsNone(self.flow.unique_id)
+
+    def test_migration_preserves_seven_yaml_values_and_exact_bridge_id(self):
+        old = self.legacy_yaml_fixture()
+        result = self.migrate()
+        self.assertEqual(result["type"], "create_entry")
+        self.assertEqual(result["data"]["migration_from_yaml"], True)
+        self.assertEqual(result["data"]["bridge_entry_id"], "existing-bridge")
+        self.assertEqual(result["data"]["confirmed_unclassified"], [])
+        for key, value in old.items():
+            self.assertEqual(result["data"][key], value)
+        self.assertEqual(self.hass.data[DOMAIN]["legacy_yaml"], old)
+        self.assertEqual(self.flow.unique_id, old["humidifier_entity"])
+
+    def test_existing_config_entry_blocks_repeated_migration(self):
+        self.legacy_yaml_fixture()
+        self.flow.existing_entries.append(object())
+        self.assertEqual(self.migrate()["reason"], "single_instance_allowed")
+
+    def test_yaml_device_ownership_change_blocks_migration(self):
+        self.legacy_yaml_fixture()
+        self.run_flow(self.flow.async_step_user())
+        self.entities["switch.led_power"].device_id = "other-device"
+        r = self.migrate()
+        self.assertEqual(r["reason"], "required_entities_missing")
+        self.assertIsNone(self.flow.unique_id)
+
+    def test_yaml_migration_rejects_changed_bridge_id(self):
+        values = self.legacy_yaml_fixture()
+        self.run_flow(self.flow.async_step_user())
+        values["bridge_entry_id"] = "different-bridge"
+        r = self.migrate()
+        self.assertEqual(r["reason"], "yaml_migration_unavailable")
+
+    def test_yaml_migration_rejects_missing_bridge(self):
+        self.legacy_yaml_fixture()
+        self.bridges.clear()
+        self.assertEqual(self.migrate()["reason"], "bridge_unavailable")
+
+    def test_yaml_migration_unclassified_sensor_needs_explicit_review(self):
+        self.legacy_yaml_fixture()
+        self.entities["sensor.temp"].device_class = None
+        first = self.run_flow(self.flow.async_step_migrate_yaml())
+        self.assertIn("confirm_temperature", first["schema"])
+        bad = self.migrate()
+        self.assertEqual(bad["errors"]["base"], "yaml_migration_entities_changed")
+        good = self.migrate(confirm_temperature=True)
+        self.assertEqual(good["type"], "create_entry")
+        self.assertEqual(good["data"]["confirmed_unclassified"], ["temperature"])
+
+    def test_yaml_flow_rejects_missing_active_patch(self):
+        self.hass.data[DOMAIN] = {"legacy_yaml": {"humidifier_entity": "x"}}
+        self.assertEqual(
+            self.migrate()["reason"], "yaml_migration_unavailable"
+        )
 
 
 if __name__ == "__main__":

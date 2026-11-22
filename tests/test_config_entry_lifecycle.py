@@ -188,5 +188,58 @@ class VentaConfigEntryLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.hass.tasks, [])
 
 
+    async def test_yaml_snapshot_pins_existing_homekit_bridge_for_ui_migration(self):
+        legacy = {
+            key: value for key, value in self.data.items()
+            if key not in ("bridge_entry_id", "confirmed_unclassified")
+        }
+        self.assertTrue(await self.integration.async_setup(self.hass, {DOMAIN: legacy}))
+        snapshot = self.hass.data[DOMAIN]["legacy_yaml"]
+        self.assertEqual(snapshot["bridge_entry_id"], self.bridge.entry_id)
+        self.assertEqual(set(snapshot), set(legacy) | {"bridge_entry_id"})
+        self.assertEqual(
+            {k: snapshot[k] for k in legacy}, legacy
+        )
+        self.assertEqual(self.hass.executor_calls, 1)
+
+    async def test_ui_entry_created_from_yaml_does_not_preempt_running_yaml(self):
+        legacy = {
+            key: value for key, value in self.data.items()
+            if key not in ("bridge_entry_id", "confirmed_unclassified")
+        }
+        self.assertTrue(await self.integration.async_setup(self.hass, {DOMAIN: legacy}))
+        proposed = SimpleNamespace(
+            entry_id="proposed-entry",
+            data=dict(self.data, migration_from_yaml=True),
+        )
+        self.assertFalse(await self.integration.async_setup_entry(self.hass, proposed))
+        self.assertNotIn("config_entry_id", self.hass.data[DOMAIN])
+        self.assertEqual(self.integration.BRIDGE_ENTRY, self.bridge.entry_id)
+        self.assertEqual(self.integration.LED, self.data["led_entity"])
+        self.assertEqual(self.hass.executor_calls, 1)
+
+    async def test_rollback_to_yaml_with_existing_ui_entry_keeps_identity(self):
+        legacy = {
+            key: value for key, value in self.data.items()
+            if key not in ("bridge_entry_id", "confirmed_unclassified")
+        }
+        self.assertTrue(await self.integration.async_setup(self.hass, {DOMAIN: legacy}))
+        proposed = SimpleNamespace(
+            entry_id="proposed-entry",
+            data=dict(self.data, migration_from_yaml=True),
+        )
+        self.assertFalse(await self.integration.async_setup_entry(self.hass, proposed))
+        # A restart with the original YAML present must restore the YAML
+        # controller rather than taking over the existing HAP accessory.
+        restarted = _load_venta_with_stubs()
+        another_hass = _Hass(self.bridge, self.temp.name)
+        self.assertTrue(await restarted.async_setup(another_hass, {DOMAIN: legacy}))
+        self.assertFalse(await restarted.async_setup_entry(another_hass, proposed))
+        self.assertEqual(restarted.BRIDGE_ENTRY, self.bridge.entry_id)
+        self.assertEqual(restarted.ENTITY, legacy["humidifier_entity"])
+        self.assertNotIn("config_entry_id", another_hass.data[DOMAIN])
+        self.assertEqual(len(another_hass.services.registered), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

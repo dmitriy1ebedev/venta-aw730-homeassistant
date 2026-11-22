@@ -9,6 +9,16 @@
           "bridge_entry_id": "Мост HomeKit"
         }
       },
+      "migrate_yaml": {
+        "title": "Перенос действующей настройки YAML",
+        "description": "Создаётся конфигурация Venta для следующего запуска. Существующий HomeKit остаётся активным. Сначала создайте и проверьте резервную копию. После переноса вручную удалите весь блок venta_homekit_native из configuration.yaml и перезапустите Home Assistant. До перезапуска новая запись может показывать ошибку настройки; прежняя YAML-конфигурация продолжает работать. При сбое верните YAML из резервной копии.",
+        "data": {
+          "confirm_backup": "Резервная копия Home Assistant создана и проверена",
+          "confirm_remove_yaml_and_restart": "Я вручную удалю YAML-настройки Venta и перезапущу HA после переноса",
+          "confirm_temperature": "Я проверил тип датчика температуры",
+          "confirm_humidity": "Я проверил тип датчика влажности"
+        }
+      },
       "entities": {
         "title": "Проверка связанных сущностей",
         "description": "Подтвердите каждую функцию отдельно. Доступны только сущности того же устройства LocalTuya.",
@@ -24,12 +34,16 @@
       }
     },
     "error": {
+      "yaml_migration_confirmation_required": "Подтвердите резервную копию и порядок перезапуска.",
+      "yaml_migration_entities_changed": "Привязанные сущности изменились. Перенос остановлен.",
       "invalid_humidifier": "Выбранный увлажнитель LocalTuya недоступен.",
       "bridge_unavailable": "Выбранный мост HomeKit недоступен.",
       "bridge_excludes_humidifier": "Увлажнитель не включён в выбранный мост HomeKit.",
       "invalid_entity": "Сущность отсутствует, изменилась или принадлежит другому устройству."
     },
     "abort": {
+      "yaml_migration_unavailable": "Нет действующей YAML-конфигурации для переноса.",
+      "interactive_yaml_migration_required": "Автоматический импорт запрещён. Запустите мастер через интерфейс HA.",
       "single_instance_allowed": "Venta уже настроена. Сначала перенесите или удалите прежнюю конфигурацию.",
       "localtuya_humidifier_missing": "Подходящий увлажнитель LocalTuya не найден.",
       "homekit_bridge_missing": "Мост HomeKit не найден.",

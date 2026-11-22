@@ -57,10 +57,17 @@ ConfigFlow smoke (scripts/ha_config_flow_smoke.py) and the real integration's
 setup_entry/replay smoke (scripts/ha_config_entry_setup_smoke.py). Both use
 in-memory fake registries with no HomeKit server or LocalTuya connection.
 
-**Still pending:** YAML import and migration (P03.3), options/reconfigure/repairs
-(P03.4), safe live unload, complete disposable runtime acceptance and an
-owner-approved production canary (P03.5). No live HomeKit migration is
-performed here. A green synthetic smoke does not authorize production rollout.
+**V120-03 stacked candidate:** interactive, owner-confirmed YAML transfer
+with pinned HomeKit bridge ID, an explicit backup acknowledgement and a
+restart-bound rollback path. See [YAML migration](YAML_MIGRATION.md).
+Automated `SOURCE_IMPORT` is rejected rather than silently creating a new
+bridge or duplicate entry. Synthetic migration tests are not a live HA
+restore test.
+
+**Still pending:** V120-03 disposable restart/rollback acceptance,
+options/reconfigure/repairs (P03.4), safe live unload, complete disposable
+runtime acceptance and an owner-approved production canary (P03.5).
+A green synthetic smoke does not authorize production rollout.
 No saved device IDs, LocalTuya local keys or pairing data should be placed in
 test fixtures, logs or GitHub issues.
 

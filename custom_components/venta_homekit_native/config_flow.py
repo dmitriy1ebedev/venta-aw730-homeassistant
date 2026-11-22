@@ -29,6 +29,7 @@ class VentaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         super().__init__()
         self._humidifier: str | None = None
         self._bridge_id: str | None = None
+        self._migration_snapshot: tuple[str, ...] | None = None
 
     def _choices(self) -> tuple[dict[str, str], dict[str, str]]:
         registry = er.async_get(self.hass)
@@ -83,6 +84,10 @@ class VentaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Choose one LocalTuya humidifier and an existing HomeKit bridge."""
+        # Interactive migration is distinct from a second installation.
+        # This never writes YAML, unloads HomeKit, or starts a second bridge.
+        if self.hass.data.get(DOMAIN, {}).get("legacy_yaml"):
+            return await self.async_step_migrate_yaml(user_input)
         if self._already_installed():
             return self.async_abort(reason="single_instance_allowed")
 
@@ -201,6 +206,106 @@ class VentaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="entities",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+        )
+
+    async def async_step_import(self, user_input: dict[str, Any] | None = None):
+        """Never silently migrate YAML through the automatic import source."""
+        return self.async_abort(reason="interactive_yaml_migration_required")
+
+    async def async_step_migrate_yaml(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        """Opt-in, restart-bound transfer of the existing seven YAML values.
+
+        Creating the entry does NOT remove or disable the active YAML patch.
+        The entry intentionally fails to set up until YAML is removed and HA
+        restarted; rollback is simply restoring the original seven YAML keys.
+        """
+        if self._async_current_entries():
+            return self.async_abort(reason="single_instance_allowed")
+        active = self.hass.data.get(DOMAIN, {})
+        legacy = active.get("legacy_yaml")
+        required = (
+            "humidifier_entity", "bridge_title", "fan_entity", "led_entity",
+            "brightness_entity", "temperature_entity", "humidity_entity",
+            "bridge_entry_id",
+        )
+        if not active.get("patched") or not isinstance(legacy, dict) or any(
+            not isinstance(legacy.get(key), str) or not legacy[key]
+            for key in required
+        ):
+            return self.async_abort(reason="yaml_migration_unavailable")
+
+        fingerprint = tuple(legacy[key] for key in required)
+        if self._migration_snapshot is None:
+            self._migration_snapshot = fingerprint
+        elif fingerprint != self._migration_snapshot:
+            return self.async_abort(reason="yaml_migration_unavailable")
+
+        self._humidifier = legacy["humidifier_entity"]
+        self._bridge_id = legacy["bridge_entry_id"]
+        if self._bridge_error():
+            return self.async_abort(reason="bridge_unavailable")
+
+        try:
+            plan = discover_from_hass(self.hass, self._humidifier)
+        except DiscoveryError:
+            return self.async_abort(reason="localtuya_humidifier_missing")
+        if not plan["can_submit"]:
+            return self.async_abort(reason="required_entities_missing")
+
+        choices = {
+            role: legacy[f"{role}_entity"] for role in ROLES
+        }
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if (
+                user_input.get("confirm_backup") is not True
+                or user_input.get("confirm_remove_yaml_and_restart") is not True
+            ):
+                errors["base"] = "yaml_migration_confirmation_required"
+            else:
+                confirmed = frozenset(
+                    role for role in ("temperature", "humidity")
+                    if user_input.get(f"confirm_{role}") is True
+                )
+                try:
+                    problems = validate_from_hass(
+                        self.hass, self._humidifier, choices,
+                        confirmed_unclassified=confirmed,
+                    )
+                except DiscoveryError:
+                    return self.async_abort(reason="localtuya_humidifier_missing")
+                if problems:
+                    errors["base"] = "yaml_migration_entities_changed"
+                elif self._bridge_error():
+                    # A stale confirmation cannot bind another HomeKit bridge.
+                    return self.async_abort(reason="yaml_migration_unavailable")
+                elif self._async_current_entries():
+                    return self.async_abort(reason="single_instance_allowed")
+                else:
+                    await self.async_set_unique_id(self._humidifier)
+                    self._abort_if_unique_id_configured()
+                    return self.async_create_entry(
+                        title="Venta AW730",
+                        data={
+                            **{key: legacy[key] for key in required},
+                            "confirmed_unclassified": sorted(confirmed),
+                            "migration_from_yaml": True,
+                        },
+                    )
+
+        schema: dict[Any, Any] = {
+            vol.Required("confirm_backup", default=False): bool,
+            vol.Required("confirm_remove_yaml_and_restart", default=False): bool,
+        }
+        for role in ("temperature", "humidity"):
+            if choices[role] in plan["roles"][role]["unclassified"]:
+                schema[vol.Required(f"confirm_{role}", default=False)] = bool
+        return self.async_show_form(
+            step_id="migrate_yaml",
             data_schema=vol.Schema(schema),
             errors=errors,
         )

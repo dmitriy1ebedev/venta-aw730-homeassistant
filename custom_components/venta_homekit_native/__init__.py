@@ -461,6 +461,14 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     EXTRA_ENTITIES = (FAN, LED, BRIGHTNESS, TEMPERATURE)
     TYPES["HumidifierDehumidifier"] = _venta_accessory_factory
     hass.data[DOMAIN] = {"original": original, "patched": True}
+    if not values.get("migration_from_yaml"):
+        # Preserve a read-only, exact in-memory migration proposal. YAML owns
+        # the active accessory until the owner removes YAML and restarts HA.
+        # The stable bridge ID prevents title collisions after migration.
+        hass.data[DOMAIN]["legacy_yaml"] = {
+            key: values[key] for key in names
+        }
+        hass.data[DOMAIN]["legacy_yaml"]["bridge_entry_id"] = bridge.entry_id
 
     # Marketplace replaces this integration's files, not LocalTuya's template
     # picker directory. Keep only a known, unchanged copy synchronized.

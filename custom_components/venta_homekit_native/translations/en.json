@@ -9,6 +9,16 @@
           "bridge_entry_id": "HomeKit bridge"
         }
       },
+      "migrate_yaml": {
+        "title": "Migrate existing YAML configuration",
+        "description": "Creates a Venta config entry for the next start; the existing HomeKit accessory stays active. First make and verify a backup. After migration, manually remove the entire venta_homekit_native section from configuration.yaml and restart Home Assistant. The new entry may show a setup error until restart; YAML remains authoritative. Restore the YAML from backup to roll back.",
+        "data": {
+          "confirm_backup": "I created and verified a Home Assistant backup",
+          "confirm_remove_yaml_and_restart": "I will remove the Venta YAML settings and restart HA after migration",
+          "confirm_temperature": "I verified the temperature sensor type",
+          "confirm_humidity": "I verified the humidity sensor type"
+        }
+      },
       "entities": {
         "title": "Confirm associated entities",
         "description": "Select every function explicitly. Only entities belonging to the same LocalTuya device are available.",
@@ -24,12 +34,16 @@
       }
     },
     "error": {
+      "yaml_migration_confirmation_required": "Confirm backup and restart steps to migrate.",
+      "yaml_migration_entities_changed": "The linked entities changed. Migration was stopped.",
       "invalid_humidifier": "The selected LocalTuya humidifier is no longer available.",
       "bridge_unavailable": "The selected bridge is unavailable.",
       "bridge_excludes_humidifier": "The existing HomeKit bridge does not include this humidifier.",
       "invalid_entity": "The selected entity is missing, changed, or belongs to another device."
     },
     "abort": {
+      "yaml_migration_unavailable": "No active YAML configuration is available to migrate.",
+      "interactive_yaml_migration_required": "Automatic import is disabled. Start migration from the HA UI.",
       "single_instance_allowed": "Venta is already configured. Migrate or remove the existing configuration before creating another.",
       "localtuya_humidifier_missing": "No eligible LocalTuya humidifier was found.",
       "homekit_bridge_missing": "No existing HomeKit bridge was found.",
