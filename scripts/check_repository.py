@@ -30,6 +30,7 @@ def validate() -> list[str]:
         "custom_components/venta_homekit_native/entity_discovery.py",
         "scripts/ha_entity_registry_smoke.py",
         "scripts/ha_config_flow_smoke.py",
+        "scripts/ha_config_entry_setup_smoke.py",
         "docs/ENTITY_DISCOVERY.md",
         "scripts/build_release.py",
         "scripts/stage_ha_runtime.py",

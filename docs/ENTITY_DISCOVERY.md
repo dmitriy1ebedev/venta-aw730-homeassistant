@@ -48,12 +48,19 @@ the entity registry on submit**.
 
 **P03.1 worktree candidate:** config_flow.py provides source/bridge selectors,
 explicit role confirmation, config-entry persistence, duplicate prevention and
-revalidation at submit and setup. Synthetic offline tests do not establish a
-working HA setup flow or HomeKit lifecycle; those require a disposable HA test.
+revalidation at submit and setup. Replaying the same config entry must not
+register listeners twice; a different entry or changed role mapping must fail
+closed without retargeting the running HomeKit accessory. tests/test_config_flow.py
+and tests/test_config_entry_lifecycle.py cover these invariants off-device.
+The isolated HA 2026.11.1/2026.11.2 workflow additionally runs both the real
+ConfigFlow smoke (scripts/ha_config_flow_smoke.py) and the real integration's
+setup_entry/replay smoke (scripts/ha_config_entry_setup_smoke.py). Both use
+in-memory fake registries with no HomeKit server or LocalTuya connection.
 
 **Still pending:** YAML import and migration (P03.3), options/reconfigure/repairs
-(P03.4), safe unload, disposable runtime acceptance and an owner-approved
-production canary (P03.5). No live HomeKit migration is performed here.
+(P03.4), safe live unload, complete disposable runtime acceptance and an
+owner-approved production canary (P03.5). No live HomeKit migration is
+performed here. A green synthetic smoke does not authorize production rollout.
 No saved device IDs, LocalTuya local keys or pairing data should be placed in
 test fixtures, logs or GitHub issues.
 

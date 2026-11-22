@@ -432,9 +432,17 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     if original is _venta_accessory_factory and hass.data.get(DOMAIN, {}).get("patched"):
         # Repeated setup is idempotent only for the same exact accessory and
         # bridge. Reject another config entry rather than switching globals.
-        if ENTITY == values["humidifier_entity"] and BRIDGE_ENTRY == bridge.entry_id:
+        if (
+            ENTITY == values["humidifier_entity"]
+            and BRIDGE_ENTRY == bridge.entry_id
+            and FAN == values["fan_entity"]
+            and LED == values["led_entity"]
+            and BRIGHTNESS == values["brightness_entity"]
+            and TEMPERATURE == values["temperature_entity"]
+            and HUMIDITY == values["humidity_entity"]
+        ):
             return True
-        _LOGGER.error("Venta: another accessory is already registered")
+        _LOGGER.error("Venta: existing accessory binding differs; refusing to retarget")
         return False
     if original is not NativeHumidifierDehumidifier:
         _LOGGER.error("Unexpected HomeKit registry: refusing to patch")
@@ -518,8 +526,9 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     """
     from .entity_discovery import DiscoveryError, validate_from_hass
 
-    if hass.data.get(DOMAIN, {}).get("patched"):
-        _LOGGER.error("Venta: existing YAML or UI setup must be migrated first")
+    active = hass.data.get(DOMAIN, {})
+    if active.get("patched") and active.get("config_entry_id") != entry.entry_id:
+        _LOGGER.error("Venta: existing YAML or another UI entry owns the HomeKit patch")
         return False
     values = dict(entry.data)
     try:
@@ -538,9 +547,18 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     if problems:
         _LOGGER.error("Venta: saved entity mapping changed; repair required")
         return False
+    if active.get("patched"):
+        # HA can request setup again for the same config entry. Never add a
+        # second listener, registration or HomeKit accessory, and never accept
+        # changed mappings in place: those need guarded reload/migration.
+        if active.get("config_entry_data") == values:
+            return True
+        _LOGGER.error("Venta: saved UI mapping differs from the active binding")
+        return False
     ok = await async_setup(hass, {DOMAIN: values})
     if ok and hass.data.get(DOMAIN, {}).get("patched"):
         hass.data[DOMAIN]["config_entry_id"] = entry.entry_id
+        hass.data[DOMAIN]["config_entry_data"] = values.copy()
     return ok
 
 
