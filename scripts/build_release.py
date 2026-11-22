@@ -16,6 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 COMPONENT = Path("custom_components") / "venta_homekit_native"
 EXCLUDED_DIRS = {"__pycache__", ".storage", ".git"}
 EXCLUDED_FILES = {".DS_Store", "Thumbs.db"}
+SENSITIVE_STEMS = {"secrets", "credentials", "local_key", "token", "access_token",
+                   "refresh_token", "client_secret", "private_key", "pairing",
+                   "config_entries", "entity_registry", "device_registry"}
 FORBIDDEN_SUFFIXES = {".pyc", ".pyo", ".pem", ".key", ".p12", ".pfx", ".bak"}
 MAX_FILE_BYTES = 8 * 1024 * 1024
 MAX_ARCHIVE_INPUT_BYTES = 32 * 1024 * 1024
@@ -66,7 +69,8 @@ def component_files(root: Path = ROOT) -> list[tuple[Path, str]]:
             raise ReleaseValidationError(f"non-regular file: {rel}")
         if entry.name in EXCLUDED_FILES or entry.suffix in {".pyc", ".pyo"}:
             continue
-        if entry.suffix in FORBIDDEN_SUFFIXES or entry.name.startswith("."):
+        if (entry.suffix in FORBIDDEN_SUFFIXES or entry.name.startswith(".")
+                or entry.stem.lower() in SENSITIVE_STEMS):
             raise ReleaseValidationError(f"unexpected or sensitive file: {rel}")
         size = entry.stat().st_size
         if size > MAX_FILE_BYTES:

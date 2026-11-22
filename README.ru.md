@@ -5,7 +5,7 @@
 # Venta AW730
 
 [![Проверки CI](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml/badge.svg)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml)
-[![Версия 1.0.4](https://img.shields.io/badge/version-1.0.4-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
+[![Версия 1.0.5](https://img.shields.io/badge/version-1.0.5-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
 [![Home Assistant](https://img.shields.io/badge/Home_Assistant-2026.11%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
 [![Apple HomeKit](https://img.shields.io/badge/Apple-HomeKit-111111?logo=apple&logoColor=white)](https://www.home-assistant.io/integrations/homekit/)
 [![Алиса](https://img.shields.io/badge/Yandex-Alice-FFCC00)](https://docs.yaha-cloud.ru/)
