@@ -4,7 +4,7 @@ Issues and pull requests are welcome. Check the [README](README.md), [security p
 
 ## Bug reports
 
-Use the [bug report form](.github/ISSUE_TEMPLATE/bug_report.yml). Include your Home Assistant and LocalTuya versions; for Apple Home problems, add the iOS version. Describe the steps, expected result, actual result and the layer affected: Tuya LAN, LocalTuya, Home Assistant, HomeKit, Alice or dashboard. Redact screenshots and logs: no Tuya keys, HomeKit pairing secrets, IP/MAC addresses or account details.
+Read the [verified compatibility matrix](docs/compatibility.md) before reporting a device as supported. Use the [bug report form](.github/ISSUE_TEMPLATE/bug_report.yml). Include the Venta, Home Assistant, LocalTuya and Tuya protocol versions; for Apple Home problems, add the iOS version. Describe the steps, expected result, actual result and the layer affected: Tuya LAN, LocalTuya, Home Assistant, HomeKit, Alice or dashboard. Redact screenshots and logs: no Tuya keys, HomeKit pairing secrets, IP/MAC addresses or account details.
 
 Security vulnerabilities must not be reported publicly; see [SECURITY.md](SECURITY.md).
 

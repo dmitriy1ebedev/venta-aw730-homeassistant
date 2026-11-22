@@ -43,7 +43,7 @@ If you are adding the device **before** configuring the Venta HomeKit extension,
 
 ## Compatibility
 
-Venta AW730, Tuya 3.4, Home Assistant 2026.11. The extension depends on internal HomeKit APIs and may need updates after major HA releases.
+Verified on one Venta AW730 Smart Life/Tuya 3.4 installation with LocalTuya 2026.10.0 and Home Assistant 2026.11.1. Other models and HA versions are not yet verified. See the [compatibility and troubleshooting matrix](docs/compatibility.md). The extension depends on internal HomeKit APIs and may need updates after major HA releases.
 
 ## License
 

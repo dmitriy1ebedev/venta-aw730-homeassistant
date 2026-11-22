@@ -19,6 +19,37 @@ body:
       label: LocalTuya version
     validations:
       required: true
+  - type: input
+    id: venta_version
+    attributes:
+      label: Venta extension version
+      placeholder: "1.0.4"
+    validations:
+      required: true
+  - type: dropdown
+    id: venta_model
+    attributes:
+      label: Device model
+      description: Only AW730 Tuya 3.4 is currently verified; other models need evidence.
+      options:
+        - AW730 (Smart Life / Tuya)
+        - Other Venta model (unverified)
+    validations:
+      required: true
+  - type: input
+    id: tuya_protocol
+    attributes:
+      label: Tuya LAN protocol (if known)
+      placeholder: "3.4 / unknown"
+    validations:
+      required: false
+  - type: input
+    id: firmware_version
+    attributes:
+      label: Device firmware VERSION only (optional)
+      description: Never include device ID, serial number, local key or account identifiers.
+    validations:
+      required: false
   - type: dropdown
     id: affected
     attributes:
@@ -36,11 +67,13 @@ body:
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
-      description: Include what worked before and what fails now.
+      label: Steps to reproduce (no destructive resets)
+      description: Give the initial state, reproducible steps, and whether the issue is visible directly in Home Assistant before Apple Home/Yandex.
       placeholder: |
-        1. ...
-        2. ...
+        1. Starting state (power/mode, no IDs or IPs): ...
+        2. Action in Home Assistant: ...
+        3. Expected result and observed state: ...
+        4. When it started (after update/restart?): ...
     validations:
       required: true
   - type: textarea

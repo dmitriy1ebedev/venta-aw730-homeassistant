@@ -45,5 +45,21 @@ class DocumentationContractTests(unittest.TestCase):
                     self.assertTrue((ROOT / target).is_file(), link)
 
 
+    def test_compatibility_matrix_and_reproducible_issue_form(self):
+        import yaml
+        matrix = (ROOT / "docs/compatibility.md").read_text()
+        for value in ("AW730", "2026.11.1", "2026.10.0", "3.4", "Unverified", "sync_managed_template"):
+            self.assertIn(value, matrix)
+        self.assertIn("not independently verified", matrix)
+        form = yaml.safe_load((ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml").read_text())
+        ids = {field.get("id"): field for field in form["body"] if field.get("id")}
+        for required in ("ha_version", "localtuya_version", "venta_version", "venta_model", "affected", "steps", "expected", "actual", "safety"):
+            self.assertIn(required, ids)
+        self.assertTrue(ids["venta_model"]["validations"]["required"])
+        self.assertTrue(ids["steps"]["validations"]["required"])
+        self.assertIn("no destructive resets", ids["steps"]["attributes"]["label"])
+        self.assertIn("redacted", ids["actual"]["attributes"]["label"].lower())
+        self.assertIn("IP/MAC", ids["safety"]["attributes"]["options"][0]["label"])
+
 if __name__ == "__main__":
     unittest.main()
