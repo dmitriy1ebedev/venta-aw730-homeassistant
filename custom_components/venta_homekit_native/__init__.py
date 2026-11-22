@@ -526,6 +526,39 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     return True
 
 
+def _binding_issue_id(entry) -> str:
+    """Stable issue per config entry; no device identifiers or secrets."""
+    return f"binding_{entry.entry_id}"
+
+
+def _report_binding_issue(hass: HomeAssistant, entry) -> None:
+    """Surface missing LocalTuya mappings in HA Repairs, never auto-repair."""
+    try:
+        from homeassistant.helpers import issue_registry as ir
+
+        ir.async_create_issue(
+            hass, DOMAIN, _binding_issue_id(entry),
+            config_entry_id=entry.entry_id,
+            data={"entry_id": entry.entry_id},
+            is_fixable=True,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="binding_unavailable",
+        )
+    except (ImportError, RuntimeError, ValueError, AttributeError):
+        # Repairs metadata must never prevent HomeKit's fail-closed return.
+        _LOGGER.warning("Venta binding review could not register a repair issue")
+
+
+def _clear_binding_issue(hass: HomeAssistant, entry) -> None:
+    """Remove only our own resolved issue after successful binding setup."""
+    try:
+        from homeassistant.helpers import issue_registry as ir
+
+        ir.async_delete_issue(hass, DOMAIN, _binding_issue_id(entry))
+    except (ImportError, RuntimeError, ValueError, AttributeError):
+        _LOGGER.warning("Venta binding issue cleanup was unavailable")
+
+
 async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     """Set up one approved UI mapping without creating any HA entities.
 
@@ -551,15 +584,18 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
         )
     except (DiscoveryError, TypeError, ValueError):
         _LOGGER.error("Venta: saved entity mapping is no longer valid")
+        _report_binding_issue(hass, entry)
         return False
     if problems:
         _LOGGER.error("Venta: saved entity mapping changed; repair required")
+        _report_binding_issue(hass, entry)
         return False
     if active.get("patched"):
         # HA can request setup again for the same config entry. Never add a
         # second listener, registration or HomeKit accessory, and never accept
         # changed mappings in place: those need guarded reload/migration.
         if active.get("config_entry_data") == values:
+            _clear_binding_issue(hass, entry)
             return True
         _LOGGER.error("Venta: saved UI mapping differs from the active binding")
         return False
@@ -567,6 +603,9 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     if ok and hass.data.get(DOMAIN, {}).get("patched"):
         hass.data[DOMAIN]["config_entry_id"] = entry.entry_id
         hass.data[DOMAIN]["config_entry_data"] = values.copy()
+        _clear_binding_issue(hass, entry)
+    elif not ok:
+        _report_binding_issue(hass, entry)
     return ok
 
 

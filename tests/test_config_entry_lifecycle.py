@@ -56,6 +56,31 @@ class _Hass:
 class VentaConfigEntryLifecycleTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.integration = _load_venta_with_stubs()
+        self.created_issues = []
+        self.deleted_issues = []
+        homeassistant = types.ModuleType("homeassistant")
+        homeassistant.__path__ = []
+        helpers = types.ModuleType("homeassistant.helpers")
+        helpers.__path__ = []
+        issue_registry = types.ModuleType("homeassistant.helpers.issue_registry")
+        issue_registry.IssueSeverity = SimpleNamespace(ERROR="error")
+        issue_registry.async_create_issue = (
+            lambda *args, **kwargs:
+            self.created_issues.append((args, kwargs))
+        )
+        issue_registry.async_delete_issue = (
+            lambda *args, **kwargs:
+            self.deleted_issues.append(args)
+        )
+        helpers.issue_registry = issue_registry
+        homeassistant.helpers = helpers
+        issue_patch = patch.dict(sys.modules, {
+            "homeassistant": homeassistant,
+            "homeassistant.helpers": helpers,
+            "homeassistant.helpers.issue_registry": issue_registry,
+        })
+        issue_patch.start()
+        self.addCleanup(issue_patch.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.data = {
@@ -239,6 +264,64 @@ class VentaConfigEntryLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(restarted.ENTITY, legacy["humidifier_entity"])
         self.assertNotIn("config_entry_id", another_hass.data[DOMAIN])
         self.assertEqual(len(another_hass.services.registered), 2)
+
+
+    async def test_missing_mapping_registers_repair_without_private_values(self):
+        discovery = sys.modules[self.discovery_name]
+        original = discovery.validate_from_hass
+        discovery.validate_from_hass = lambda *args, **kwargs: {
+            "led": "entity_not_registered"
+        }
+        try:
+            self.assertFalse(await self.integration.async_setup_entry(
+                self.hass, self.entry,
+            ))
+        finally:
+            discovery.validate_from_hass = original
+        self.assertEqual(len(self.created_issues), 1)
+        args, kwargs = self.created_issues[0]
+        self.assertEqual(args[1], DOMAIN)
+        self.assertEqual(args[2], "binding_" + self.entry.entry_id)
+        self.assertEqual(kwargs["translation_key"], "binding_unavailable")
+        self.assertEqual(kwargs["data"], {"entry_id": self.entry.entry_id})
+        self.assertNotIn("local_key", repr(kwargs))
+        self.assertEqual(self.deleted_issues, [])
+        self.assertEqual(self.hass.data, {})
+
+    async def test_recovery_setup_clears_only_own_issue(self):
+        self.assertTrue(await self.integration.async_setup_entry(
+            self.hass, self.entry,
+        ))
+        self.assertEqual(len(self.deleted_issues), 1)
+        self.assertEqual(
+            self.deleted_issues[0][1:],
+            (DOMAIN, "binding_" + self.entry.entry_id),
+        )
+        self.assertEqual(self.created_issues, [])
+
+    async def test_missing_bridge_creates_binding_repair_issue(self):
+        self.entry.data = dict(self.data, bridge_entry_id="missing-bridge")
+        self.assertFalse(await self.integration.async_setup_entry(
+            self.hass, self.entry,
+        ))
+        self.assertEqual(len(self.created_issues), 1)
+        self.assertIs(
+            self.integration.TYPES["HumidifierDehumidifier"],
+            FakeNativeHumidifier,
+        )
+
+    async def test_yaml_owner_does_not_create_spurious_repair(self):
+        legacy = {
+            k: v for k, v in self.data.items()
+            if k not in ("bridge_entry_id", "confirmed_unclassified")
+        }
+        self.assertTrue(await self.integration.async_setup(
+            self.hass, {DOMAIN: legacy},
+        ))
+        self.assertFalse(await self.integration.async_setup_entry(
+            self.hass, self.entry,
+        ))
+        self.assertEqual(self.created_issues, [])
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ import sys
 import types
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, PropertyMock, patch
 
 
 def validate(config: Path, expected_version: str) -> dict:
@@ -57,6 +57,7 @@ def validate(config: Path, expected_version: str) -> dict:
             entity("select.fixture_fan"),
             entity("select.fixture_brightness"),
             entity("switch.fixture_led"),
+            entity("switch.fixture_led_alternative"),
             entity("sensor.fixture_temperature", klass="temperature"),
             entity("sensor.fixture_humidity", klass="humidity"),
         ]
@@ -79,6 +80,10 @@ def validate(config: Path, expected_version: str) -> dict:
             config_entries=SimpleNamespace(
                 async_entries=lambda domain, *args: [bridge] if domain == "homekit" else []
             ),
+        )
+        updates: list[tuple[object, dict]] = []
+        hass.config_entries.async_update_entry = (
+            lambda entry, **kwargs: updates.append((entry, kwargs))
         )
         flow.hass = hass
 
@@ -154,6 +159,96 @@ def validate(config: Path, expected_version: str) -> dict:
                 assert imported["reason"] == (
                     "interactive_yaml_migration_required"
                 )
+
+                # Real OptionsFlow API; in-memory staging must not mutate the
+                # existing HomeKit bridge or a live LocalTuya mapping.
+                from homeassistant.config_entries import OptionsFlow
+                from homeassistant.components.repairs import RepairsFlow
+
+                hass.data.pop("venta_homekit_native")
+                entry = SimpleNamespace(
+                    entry_id="ci-venta-config-entry",
+                    domain="venta_homekit_native",
+                    unique_id=humidifier.entity_id,
+                    data={**legacy, "confirmed_unclassified": []},
+                    options={},
+                )
+                opts = module.VentaConfigFlow.async_get_options_flow(entry)
+                assert isinstance(opts, OptionsFlow)
+                opts.hass = hass
+                with patch.object(
+                    type(opts), "config_entry",
+                    new_callable=PropertyMock, return_value=entry,
+                ):
+                    shown = await opts.async_step_init()
+                    assert shown["step_id"] == "init", shown
+                    staged = await opts.async_step_init({
+                        **mapping,
+                        "bridge_entry_id": bridge.entry_id,
+                        "led_entity": "switch.fixture_led_alternative",
+                        "confirm_staging": True,
+                    })
+                    assert staged["type"] == "create_entry", staged
+                    assert staged["data"]["review_proposal"]["led_entity"] == (
+                        "switch.fixture_led_alternative"
+                    )
+                assert entry.data["led_entity"] == "switch.fixture_led"
+                assert not updates
+                entry.options = staged["data"]
+
+                with (
+                    patch.object(flow, "_get_reconfigure_entry", return_value=entry),
+                    patch.object(flow, "_abort_if_unique_id_mismatch"),
+                ):
+                    pending = await flow.async_step_reconfigure()
+                    assert pending["step_id"] == "reconfigure", pending
+                    rejected = await flow.async_step_reconfigure({
+                        "confirm_backup": True,
+                        "confirm_manual_restart": False,
+                    })
+                    assert rejected["errors"]["base"] == (
+                        "restart_confirmation_required"
+                    )
+                    assert not updates
+                    approved = await flow.async_step_reconfigure({
+                        "confirm_backup": True,
+                        "confirm_manual_restart": True,
+                    })
+                    assert approved["reason"] == (
+                        "restart_required_for_reconfigure"
+                    )
+                assert len(updates) == 1, updates
+                assert updates[0][1]["data"]["led_entity"] == (
+                    "switch.fixture_led_alternative"
+                )
+                assert "review_proposal" not in updates[0][1]["options"]
+                assert not hass.data
+                assert bridge.entry_id == "fixture-homekit-bridge"
+
+                # The genuine HA RepairsFlow class revalidates the original
+                # entry but does not reload the bridge, change credentials,
+                # perform pairing, or call services.
+                repair_spec = importlib.util.spec_from_file_location(
+                    pkgname + ".repairs", component / "repairs.py"
+                )
+                assert repair_spec and repair_spec.loader
+                repair_module = importlib.util.module_from_spec(repair_spec)
+                repair_spec.loader.exec_module(repair_module)
+                hass.config_entries.async_get_entry = lambda identifier: (
+                    entry if identifier == entry.entry_id else None
+                )
+                repair = await repair_module.async_create_fix_flow(
+                    hass, "binding_" + entry.entry_id,
+                    {"entry_id": entry.entry_id},
+                )
+                assert isinstance(repair, RepairsFlow)
+                repair.hass = hass
+                check = await repair.async_step_init()
+                assert check["step_id"] == "init", check
+                done = await repair.async_step_init({"confirm_review": True})
+                assert done["type"] == "create_entry", done
+                assert len(updates) == 1
+                assert not hass.data
 
         asyncio.run(exercise())
 
