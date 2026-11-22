@@ -120,6 +120,41 @@ def validate(config: Path, expected_version: str) -> dict:
                 assert created["data"]["led_entity"] == mapping["led_entity"]
                 assert created["data"]["confirmed_unclassified"] == []
 
+                # Real HA ConfigFlow must require an explicit backup and a
+                # restart boundary for legacy YAML, without changing the
+                # active HomeKit bridge, HAP registry or physical device.
+                legacy = {
+                    "humidifier_entity": humidifier.entity_id,
+                    "bridge_title": bridge.title,
+                    "bridge_entry_id": bridge.entry_id,
+                    **mapping,
+                }
+                hass.data["venta_homekit_native"] = {
+                    "patched": True, "legacy_yaml": legacy,
+                }
+                migration = await flow.async_step_user()
+                assert migration["step_id"] == "migrate_yaml", migration
+                declined = await flow.async_step_migrate_yaml({
+                    "confirm_backup": False,
+                    "confirm_remove_yaml_and_restart": True,
+                })
+                assert declined["errors"]["base"] == (
+                    "yaml_migration_confirmation_required"
+                )
+                migrated = await flow.async_step_migrate_yaml({
+                    "confirm_backup": True,
+                    "confirm_remove_yaml_and_restart": True,
+                })
+                assert migrated["type"] == "create_entry", migrated
+                assert migrated["data"]["bridge_entry_id"] == bridge.entry_id
+                assert migrated["data"]["migration_from_yaml"] is True
+                assert migrated["data"]["fan_entity"] == mapping["fan_entity"]
+                assert hass.data["venta_homekit_native"]["legacy_yaml"] == legacy
+                imported = await flow.async_step_import(legacy)
+                assert imported["reason"] == (
+                    "interactive_yaml_migration_required"
+                )
+
         asyncio.run(exercise())
 
     return {
