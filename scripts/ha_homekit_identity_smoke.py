@@ -17,21 +17,29 @@ from unittest.mock import patch
 
 
 def _hap_ids(accessory):
-    """Record only non-secret HAP structure, not HomeKit pairing data."""
+    """Compute real HA persistent allocation keys; PyHAP has no char.iid."""
     identities = []
     all_iids = []
+    storage = accessory.iid_manager._iid_storage
     for service in accessory.services:
+        service_iid = storage.get_or_allocate_iid(
+            accessory.aid, service.type_id, service.unique_id, None, None,
+        )
         characteristics = []
         for char in service.characteristics:
+            char_iid = storage.get_or_allocate_iid(
+                accessory.aid, service.type_id, service.unique_id,
+                char.type_id, char.unique_id,
+            )
             characteristics.append((
-                str(char.type_id), str(char.unique_id), char.iid,
+                str(char.type_id), str(char.unique_id), char_iid,
             ))
-            all_iids.append(char.iid)
+            all_iids.append(char_iid)
         identities.append((
             str(service.type_id), str(service.unique_id),
-            service.iid, tuple(sorted(characteristics)),
+            service_iid, tuple(sorted(characteristics)),
         ))
-        all_iids.append(service.iid)
+        all_iids.append(service_iid)
     assert len(all_iids) == len(set(all_iids)), "duplicate accessory IID"
     return tuple(sorted(identities))
 
