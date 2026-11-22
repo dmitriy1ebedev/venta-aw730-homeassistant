@@ -32,7 +32,14 @@ def _source_and_destination(config_dir: Path) -> tuple[Path, Path]:
     source = Path(__file__).resolve().parent / "templates" / FILENAME
     if not source.is_file():
         raise RuntimeError("Bundled Venta template is missing. Reinstall Venta AW730.")
-    destination_dir = config_dir / "custom_components" / "localtuya" / "templates"
+    localtuya_root = config_dir / "custom_components" / "localtuya"
+    destination_dir = localtuya_root / "templates"
+    # Never follow a redirected integration/templates directory; a symlink
+    # can silently move writes outside the Home Assistant config tree.
+    if any(part.is_symlink() for part in (
+        config_dir / "custom_components", localtuya_root, destination_dir,
+    )):
+        raise RuntimeError("Refusing symlink in LocalTuya template directory.")
     if not destination_dir.is_dir():
         raise RuntimeError("Install LocalTuya first; its templates directory was not found.")
     return source, destination_dir / FILENAME
@@ -58,10 +65,20 @@ def _managed_digest(config_dir: Path) -> str | None:
     return digest if isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) else None
 
 
-def _save_managed_digest(config_dir: Path, content: bytes) -> None:
+def _ensure_safe_marker_storage(config_dir: Path) -> None:
+    """Refuse redirected or non-directory .storage before template mutation."""
     marker = _marker_path(config_dir)
-    if marker.is_symlink():
-        raise RuntimeError("Refusing symlink for template tracking marker")
+    if marker.parent.is_symlink() or (
+        marker.parent.exists() and not marker.parent.is_dir()
+    ):
+        raise RuntimeError("Refusing symlink or invalid .storage directory")
+    if marker.is_symlink() or (marker.exists() and not marker.is_file()):
+        raise RuntimeError("Refusing symlink or invalid template tracking marker")
+
+
+def _save_managed_digest(config_dir: Path, content: bytes) -> None:
+    _ensure_safe_marker_storage(config_dir)
+    marker = _marker_path(config_dir)
     marker.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps({
         "version": 1,
@@ -170,6 +187,9 @@ def sync_managed_template(config_dir: Path) -> str:
             return "skipped: LocalTuya is not installed"
         raise
 
+    # The marker must be safe BEFORE changing an installed template:
+    # writing the file then discovering an unsafe .storage is too late.
+    _ensure_safe_marker_storage(config_dir)
     fresh = source.read_bytes()
     if destination.is_symlink():
         return "skipped: template is a symlink"
@@ -197,6 +217,7 @@ def main() -> int:
     parser.add_argument("--replace", action="store_true", help="Back up and replace a different existing template")
     args = parser.parse_args()
     try:
+        _ensure_safe_marker_storage(args.ha_config)
         result = install(args.ha_config, replace=args.replace)
         if result == "installed" or result == "already installed":
             _save_managed_digest(args.ha_config, (Path(__file__).resolve().parent / "templates" / FILENAME).read_bytes())
