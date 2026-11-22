@@ -24,7 +24,7 @@ from homeassistant.const import (
     STATE_OFF,
     STATE_ON,
 )
-from homeassistant.core import Event, HassJobType, HomeAssistant, State, callback
+from homeassistant.core import Event, HassJobType, HomeAssistant, State, SupportsResponse, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.components.homekit.accessories import TYPES
@@ -428,8 +428,12 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             integration_dir=Path(__file__).resolve().parent,
         )
         _LOGGER.info("Venta diagnostic status: %s", json.dumps(report, sort_keys=True))
+        return report
 
-    hass.services.async_register(DOMAIN, "log_diagnostics", log_diagnostics)
+    hass.services.async_register(
+        DOMAIN, "log_diagnostics", log_diagnostics,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
 
     if hass.is_running:
         hass.async_create_task(_reload_when_bridge_ready(hass))

@@ -7,7 +7,8 @@ reload_venta:
 log_diagnostics:
   name: Log sanitized Venta diagnostics
   description: >-
-    Writes a read-only status report to the Home Assistant log with component
-    versions, LocalTuya availability, linked-entity readiness and HomeKit bridge
-    readiness. Never logs entity IDs, local keys, IP/MAC or pairing data.
+    Returns a read-only, privacy-safe JSON status response in Developer Tools and
+    optionally records it at INFO log level. Includes component versions,
+    LocalTuya availability, linked-entity readiness and HomeKit bridge state.
+    Never returns entity IDs, local keys, IP/MAC or pairing data.
     Does not reboot, reconnect, pair or change the physical air washer.

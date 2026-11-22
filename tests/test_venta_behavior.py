@@ -110,6 +110,7 @@ def _load_venta_with_stubs():
         HassJobType=types.SimpleNamespace(Callback="callback"),
         HomeAssistant=object,
         State=FakeState,
+        SupportsResponse=types.SimpleNamespace(OPTIONAL="optional"),
         callback=lambda fn: fn,
     )
     module("homeassistant.helpers.dispatcher", async_dispatcher_send=lambda *a: None)
@@ -301,9 +302,11 @@ class VentaDiagnosticsRegistrationTests(unittest.IsolatedAsyncioTestCase):
                 return homekit_entry if entry_id == homekit_entry.entry_id else None
 
         handlers = {}
+        registered_options = {}
         class Services:
-            def async_register(self, domain_name, action, handler):
+            def async_register(self, domain_name, action, handler, **options):
                 handlers[(domain_name, action)] = handler
+                registered_options[(domain_name, action)] = options
 
             async def async_call(self, *args, **kwargs):
                 raise AssertionError("diagnostics must not write to hardware")
@@ -335,7 +338,11 @@ class VentaDiagnosticsRegistrationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn((domain, "reload_venta"), handlers)
                 self.assertIn((domain, "log_diagnostics"), handlers)
                 self.assertEqual(hass.executor_calls, 1)
-                handlers[(domain, "log_diagnostics")](None)
+                response = handlers[(domain, "log_diagnostics")](None)
+                self.assertEqual(
+                    registered_options[(domain, "log_diagnostics")]["supports_response"],
+                    "optional",
+                )
 
             records = [
                 args[1] for args, _ in (
@@ -344,6 +351,7 @@ class VentaDiagnosticsRegistrationTests(unittest.IsolatedAsyncioTestCase):
             ]
             self.assertEqual(len(records), 1)
             result = json.loads(records[0])
+            self.assertEqual(result, response)
             self.assertEqual(result["humidifier"], "off")
             self.assertEqual(result["homekit_bridge"], "ready")
             self.assertEqual(result["integration_version"], "1.0.4")
