@@ -1,6 +1,6 @@
 # Maintaining and publishing Venta AW730
 
-This document is for maintainers, not an installation step.
+This document is for maintainers, not an installation step. Follow the [reproducible release checklist](RELEASING.md) and [CI/supply-chain audit](CI_SECURITY.md); neither unit tests nor a GitHub tag alone prove an installed release.
 
 ## Repositories
 

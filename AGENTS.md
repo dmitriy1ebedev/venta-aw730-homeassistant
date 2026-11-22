@@ -6,7 +6,7 @@ Read [ROADMAP.md](ROADMAP.md), [README.md](README.md), [architecture](docs/archi
 
 - The integration domain is `venta_homekit_native`. Do not rename it; installed Home Assistant systems depend on it.
 - The Marketplace installs `custom_components/venta_homekit_native/`. It does **not** install LocalTuya.
-- The bundled `templates/venta_aw730.yaml` is copied into LocalTuya **only on explicit user action**. Preserve the existing-template refusal and `--replace` backup behavior.
+- The bundled `templates/venta_aw730.yaml` is synchronized by `sync_managed_template` on Home Assistant setup, but only when absent, unchanged and managed, or a recognized older official copy. Keep customized templates untouched. Manual `install_localtuya_template.py --replace` explicitly backs up a differing copy; do not alter existing LocalTuya entities or credentials.
 - HomeKit humidifier target modes are 0=Auto and 1=Humidify. Venta AW730 cannot dehumidify.
 - Keep HomeKit pairing identities, exposed entity IDs, configured names and the existing bridge stable. Internal HA HomeKit/PyHAP APIs are not a public contract.
 - Retain the original LocalTuya mapping attribution in `THIRD_PARTY_NOTICES.md`.
