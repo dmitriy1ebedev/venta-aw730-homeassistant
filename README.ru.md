@@ -49,4 +49,4 @@
 
 MIT © Dmitriy Lebedev. Сопоставления Tuya адаптированы из проекта [Shinz2711](https://github.com/Shinz2711/venta-aw730-localtuya) (MIT; [атрибуция](THIRD_PARTY_NOTICES.md)).
 
-Проект: [Дорожная карта](ROADMAP.md) · [История изменений](CHANGELOG.md) · [Процедура выпуска](docs/RELEASING.md) · [Участие](CONTRIBUTING.md) · [Безопасность](SECURITY.md) · [Правила сообщества](CODE_OF_CONDUCT.md)
+Проект: [Дорожная карта](ROADMAP.md) · [История изменений](CHANGELOG.md) · [Процедура выпуска](docs/RELEASING.md) · [Диагностика](docs/DIAGNOSTICS.md) · [Участие](CONTRIBUTING.md) · [Безопасность](SECURITY.md) · [Правила сообщества](CODE_OF_CONDUCT.md)

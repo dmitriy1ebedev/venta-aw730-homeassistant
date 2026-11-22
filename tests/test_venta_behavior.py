@@ -98,6 +98,7 @@ def _load_venta_with_stubs():
     module("pyhap.util", callback=lambda fn: fn)
     module(
         "homeassistant.const",
+        __version__="2026.11.1",
         ATTR_ENTITY_ID="entity_id",
         EVENT_HOMEASSISTANT_STARTED="started",
         STATE_OFF="off",
@@ -260,6 +261,104 @@ class VentaCommandBehaviorTests(unittest.IsolatedAsyncioTestCase):
         self.accessory._venta_set_led({"On": False, "Brightness": 1})
         self.assertEqual(self.accessory.calls[0][1], "turn_off")
         self.assertEqual(self.accessory.calls[1][2]["option"], "1")
+
+
+
+class VentaDiagnosticsRegistrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_service_registers_and_logs_strictly_redacted_status(self):
+        import json
+        import tempfile
+        from types import SimpleNamespace
+
+        integration = _load_venta_with_stubs()
+        domain = "venta_homekit_native"
+        values = {
+            "humidifier_entity": "humidifier.fixture_secret_venta",
+            "bridge_title": "fixture_bridge_title_secret",
+            "fan_entity": "select.fixture_fan_secret",
+            "led_entity": "switch.fixture_led_secret",
+            "brightness_entity": "select.fixture_brightness_secret",
+            "temperature_entity": "sensor.fixture_temperature_secret",
+            "humidity_entity": "sensor.fixture_humidity_secret",
+        }
+        homekit_entry = SimpleNamespace(
+            title=values["bridge_title"],
+            options={"mode": "bridge", "filter": {"include_entities": [values["humidifier_entity"]]}},
+            entry_id="fixture_bridge_entry_secret",
+            runtime_data=SimpleNamespace(homekit=SimpleNamespace(
+                status="running", driver=object(), bridge=object()
+            )),
+        )
+        class Entries:
+            def async_entries(self, domain_name):
+                if domain_name == "homekit":
+                    return [homekit_entry]
+                if domain_name == "localtuya":
+                    return [SimpleNamespace(state="loaded")]
+                return []
+
+            def async_get_entry(self, entry_id):
+                return homekit_entry if entry_id == homekit_entry.entry_id else None
+
+        handlers = {}
+        class Services:
+            def async_register(self, domain_name, action, handler):
+                handlers[(domain_name, action)] = handler
+
+            async def async_call(self, *args, **kwargs):
+                raise AssertionError("diagnostics must not write to hardware")
+
+        class Hass:
+            def __init__(self, config_dir):
+                self.states = {
+                    values["humidifier_entity"]: FakeState(
+                        "off", local_key="MY_PRIVATE_KEY", ip="192.168.33.10"
+                    )
+                }
+                self.config_entries = Entries()
+                self.config = SimpleNamespace(config_dir=config_dir)
+                self.services = Services()
+                self.data = {}
+                self.is_running = False
+                self.bus = SimpleNamespace(async_listen_once=lambda *args: None)
+                self.executor_calls = 0
+
+            async def async_add_executor_job(self, fn, *args):
+                self.executor_calls += 1
+                return fn(*args)
+
+        with tempfile.TemporaryDirectory() as temp:
+            hass = Hass(temp)
+            with patch.object(integration._LOGGER, "info") as log:
+                success = await integration.async_setup(hass, {domain: values})
+                self.assertTrue(success)
+                self.assertIn((domain, "reload_venta"), handlers)
+                self.assertIn((domain, "log_diagnostics"), handlers)
+                self.assertEqual(hass.executor_calls, 1)
+                handlers[(domain, "log_diagnostics")](None)
+
+            records = [
+                args[1] for args, _ in (
+                    (call.args, call.kwargs) for call in log.call_args_list
+                ) if args and args[0] == "Venta diagnostic status: %s"
+            ]
+            self.assertEqual(len(records), 1)
+            result = json.loads(records[0])
+            self.assertEqual(result["humidifier"], "off")
+            self.assertEqual(result["homekit_bridge"], "ready")
+            self.assertEqual(result["integration_version"], "1.0.4")
+            self.assertEqual(result["localtuya"], "loaded")
+            serialized = json.dumps(result)
+            for secret in (
+                "fixture_secret_venta", "fixture_bridge_entry_secret",
+                "192.168.33.10", "MY_PRIVATE_KEY",
+                "fixture_bridge_title_secret",
+            ):
+                self.assertNotIn(secret, serialized)
+            self.assertEqual(
+                set(result["linked_entities"]),
+                {"fan", "led", "brightness", "temperature", "humidity"},
+            )
 
 
 if __name__ == "__main__":

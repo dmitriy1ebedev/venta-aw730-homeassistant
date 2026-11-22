@@ -25,6 +25,8 @@ def validate() -> list[str]:
         "LICENSE",
         "docs/RELEASING.md",
         "docs/CI_SECURITY.md",
+        "docs/DIAGNOSTICS.md",
+        "custom_components/venta_homekit_native/diagnostics.py",
         "scripts/build_release.py",
         "scripts/stage_ha_runtime.py",
         "scripts/ha_native_homekit_smoke.py",

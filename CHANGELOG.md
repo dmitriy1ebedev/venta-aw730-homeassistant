@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Add an explicit, read-only `venta_homekit_native.log_diagnostics` service with allow-listed component versions, entity availability, HomeKit Bridge state and safe follow-up codes; excludes secrets, identifiers, raw sensor data and network information.
+- Keep LocalTuya protocol error attribution separate from Home Assistant entity state; the service cannot infer handshake root causes.
+
 ## 1.0.4 (2026-11-22)
 - Automatically reconcile managed LocalTuya templates when Venta starts after a Marketplace update; preserve customized templates and back up a prior managed version before replacement.
 - Track managed template SHA-256 in Home Assistant `.storage`; do not rewrite already configured LocalTuya devices, their entity IDs or credentials.

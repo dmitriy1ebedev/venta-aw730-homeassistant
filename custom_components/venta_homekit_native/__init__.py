@@ -6,8 +6,12 @@ Uses Home Assistant's own HomeKit HomeAccessory and bridge lifecycle.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
+
+from homeassistant.const import __version__ as HA_VERSION
+from .diagnostics import collect_diagnostics
 
 import voluptuous as vol
 
@@ -404,6 +408,28 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     # For explicit testing / reconnect, not full HomeKit or HA restart.
     hass.services.async_register(DOMAIN, "reload_venta", manual_reload)
+
+    @callback
+    def log_diagnostics(_):
+        # Explicit, read-only request. Report only allow-listed statuses;
+        # never log raw device state/attributes, entity IDs or pairing data.
+        report = collect_diagnostics(
+            hass,
+            entity_ids={
+                "humidifier": ENTITY,
+                "fan": FAN,
+                "led": LED,
+                "brightness": BRIGHTNESS,
+                "temperature": TEMPERATURE,
+                "humidity": HUMIDITY,
+            },
+            bridge_entry_id=BRIDGE_ENTRY,
+            home_assistant_version=HA_VERSION,
+            integration_dir=Path(__file__).resolve().parent,
+        )
+        _LOGGER.info("Venta diagnostic status: %s", json.dumps(report, sort_keys=True))
+
+    hass.services.async_register(DOMAIN, "log_diagnostics", log_diagnostics)
 
     if hass.is_running:
         hass.async_create_task(_reload_when_bridge_ready(hass))

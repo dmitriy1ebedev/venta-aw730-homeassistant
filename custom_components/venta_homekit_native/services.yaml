@@ -3,3 +3,11 @@ reload_venta:
   description: >-
     Rebuilds only the existing Venta AW730 accessory inside HomeKit Bridge,
     without resetting HomeKit pairings or restarting Home Assistant.
+
+log_diagnostics:
+  name: Log sanitized Venta diagnostics
+  description: >-
+    Writes a read-only status report to the Home Assistant log with component
+    versions, LocalTuya availability, linked-entity readiness and HomeKit bridge
+    readiness. Never logs entity IDs, local keys, IP/MAC or pairing data.
+    Does not reboot, reconnect, pair or change the physical air washer.

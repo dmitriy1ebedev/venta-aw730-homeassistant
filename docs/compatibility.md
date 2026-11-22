@@ -36,6 +36,8 @@ The device firmware version and any variations of its DP schema were not indepen
 
 ## Safe diagnostic report (read-only)
 
+The source version after 1.0.4 adds an opt-in `venta_homekit_native.log_diagnostics` service that reports only safe status categories. It is **not** present in the installed 1.0.4 baseline. See [diagnostic service guide](DIAGNOSTICS.md).
+
 To file an issue use [Bug report](../.github/ISSUE_TEMPLATE/bug_report.yml). Include only:
 
 - Model as printed on the unit (e.g. AW730), whether it is a Smart Life/Tuya device; firmware **version** if known, but never serial/Device ID.

@@ -49,4 +49,4 @@ Verified on one Venta AW730 Smart Life/Tuya 3.4 installation with LocalTuya 2026
 
 MIT © Dmitriy Lebedev. Tuya mappings adapted from [Shinz2711](https://github.com/Shinz2711/venta-aw730-localtuya) (MIT; [attribution](THIRD_PARTY_NOTICES.md)).
 
-Project: [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md) · [Release process](docs/RELEASING.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md)
+Project: [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md) · [Release process](docs/RELEASING.md) · [Diagnostic guide](docs/DIAGNOSTICS.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md)
