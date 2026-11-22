@@ -37,6 +37,8 @@ jobs:
 
   hacs:
     name: HACS / Marketplace validation
+    # GitVerse has no usable GitHub token for this GitHub-only metadata check.
+    if: ${{ github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -52,6 +54,8 @@ jobs:
 
   hassfest:
     name: Home Assistant hassfest
+    # GitVerse runners do not expose Docker; GitHub runs the full hassfest gate.
+    if: ${{ github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
