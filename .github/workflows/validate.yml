@@ -46,6 +46,9 @@ jobs:
       - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # pinned main at 2026-11-22
         with:
           category: integration
+          # Custom Marketplace repository; GitHub Topics are managed separately.
+          # Keep all integration/content/security checks enabled.
+          ignore: topics
 
   hassfest:
     name: Home Assistant hassfest
