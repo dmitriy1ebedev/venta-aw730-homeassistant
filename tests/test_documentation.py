@@ -20,6 +20,16 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertRegex(changelog, rf"(?m)^## {re.escape(version)} \(\d{{4}}-\d{{2}}-\d{{2}}\)$")
         for historical in ("1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4"):
             self.assertIn("## " + historical + " (", changelog)
+        self.assertEqual((ROOT / "VERSION").read_text().strip(), version)
+        for name, label in (("README.md", "Version"), ("README.ru.md", "Версия")):
+            with self.subTest(readme=name):
+                readme = (ROOT / name).read_text()
+                badges = re.findall(
+                    r"img\.shields\.io/badge/version-([0-9]+\.[0-9]+\.[0-9]+)-",
+                    readme,
+                )
+                self.assertEqual(badges, [version], "README badge must match manifest")
+                self.assertIn(f"[![{label} {version}]", readme)
 
     def test_installer_documentation_matches_managed_sync(self):
         architecture = (ROOT / "docs/architecture.md").read_text()
