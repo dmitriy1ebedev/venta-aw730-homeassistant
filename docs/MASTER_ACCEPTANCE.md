@@ -44,21 +44,39 @@ with `check_config` again. Missing or corrupted backups, modified YAML,
 symlinks and tampered staged entries cause fail-closed errors. No actual
 config entry is installed by this rehearsal.
 
+## Full Home Assistant cold-boot and restart rehearsal
+
+An additional CI gate boots **three independent real Home Assistant
+processes**, on both tested HA versions, with a private `/tmp` copy of the
+synthetic component archive. The process listens only on container-local
+loopback HTTP, and readiness requires an actual HA HTTP response, not
+mere process existence. After each boot, HA must shut down cleanly.
+The test checks the genuine `.storage/core.config_entries` loader's
+persistence of the exact synthetic Venta and disabled fake HomeKit bridge
+IDs, rejecting duplication, drift and unexpected HomeKit pairing artifacts.
+The HA configuration runs with a synthetic YAML block, then after
+removing the block while retaining the fake UI entry, and finally after
+restoring YAML byte-for-byte. All runs use Docker `--network none`.
+
+The fake LocalTuya entities intentionally do not exist, so their binding
+must fail closed. The config entry is seeded as a synthetic storage
+fixture, not created by clicking the wizard. No real physical device,
+HomeKit pairing, or remote snapshot is available to this test.
+
 ## Acceptance gap and rollback
 
-This gate does **not** exercise Home Assistant's actual persisted config
-entry manager across a full boot/restart, a real Apple Home pairing, or
-a restore of the owner's configuration snapshot. It exercises internal
-HomeKit identity allocation with synthetic data only. Therefore it is
-incorrect to claim that a green CI run proves production migration or
-grants permission to restart HA.
+Green isolated CI therefore covers real HA boot, config-entry storage
+persistence, synthetic YAML rollback and HomeKit AID/IID stability, but
+**does not prove successful production migration**. The owner's real
+LocalTuya registry, a complete HA snapshot restoration with Apple Home
+pairing state, and a live migration canary remain separate acceptance
+gates. Green synthetic CI is not permission to modify production HA.
 
-Before completing V120-05, require a **separate disposable** HA startup
-from a sanitized snapshot, YAML-to-UI migration and genuine restored
-snapshot/restart, acceptance of original HomeKit AID/IID and other
-accessories, both RU/EN wizards, and an **owner-approved canary** with
-verified rollback readiness. Any changed identity, duplicate
-humidifier, failed setup or unrecognized HA API must block rollout.
+Before closing V120-05, require a sanctioned full snapshot/restart with
+the real HomeKit AID/IID and other accessories preserved, both RU/EN
+wizard interactions and an owner-approved canary with verified rollback
+readiness. Any changed identity, duplicate humidifier, failed setup
+or unrecognized HA API must block rollout.
 Never remove `.storage`, reset Apple Home or silently take over an
 existing LocalTuya device to work around a failed test.
 

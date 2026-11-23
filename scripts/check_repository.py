@@ -46,6 +46,8 @@ def validate() -> list[str]:
         "docs/MASTER_ACCEPTANCE.md",
         "scripts/ha_snapshot_rehearsal.py",
         "tests/test_snapshot_rehearsal.py",
+        "scripts/ha_isolated_boot_smoke.py",
+        "tests/test_real_ha_boot_fixture.py",
         "hacs.json",
         ".github/CODEOWNERS",
         ".github/workflows/validate.yml",
