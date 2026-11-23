@@ -42,12 +42,12 @@ The device firmware version and any variations of its DP schema were not indepen
 - Marketplace updates only the Venta integration files. On the next HA setup, `sync_managed_template` installs a missing LocalTuya template or updates an unchanged previously managed copy (or a recognized older official copy), backing up the previous template. **Customized templates are preserved.** A redirected LocalTuya templates directory or a symlinked `.storage` tracking marker is refused before writing. A previous managed template is retained as a timestamped `.bak`, which can be restored manually after checking it. Existing LocalTuya config entries, entities and local keys are never rewritten.
 - If the template is absent, check that LocalTuya is installed first. For a **manual** template installation use `install_localtuya_template.py`; to replace a differing existing file requires `--replace` and creates a backup. Do not replace a customized template before reviewing its differences.
 - If a device is unavailable, check the current HA/LocalTuya version, protocol version and entities and first resolve the underlying LAN/LocalTuya error. Don't delete the config entry, reset service counters, or re-pair HomeKit as a troubleshooting shortcut.
-- If a new Venta/Home Assistant version breaks behavior, stop further changes, inspect redacted logs, compare the installed version to the last known good, and restore from a **verified** backup/previous supported package using the administrator's approved recovery procedure. Recheck HomeKit identity before declaring recovery. The repo does not yet provide an automated live rollback.
+- If a new Venta/Home Assistant version breaks behavior, stop further changes, inspect redacted logs, compare the installed version to the last known good, and restore from a **verified** backup/previous supported package using the administrator's approved recovery procedure. Recheck HomeKit identity before declaring recovery. The guarded 1.2.0 release recipe includes an explicit rollback, but the formal protected adoption is not yet approved, and ordinary Marketplace upgrades have no general automatic rollback.
 - HomeKit behavior uses internal Home Assistant/PyHAP APIs. Treat upgrades outside the tested combination as unverified until isolated CI and HomeKit compatibility tests pass.
 
 ## Safe diagnostic report (read-only)
 
-The source version after 1.0.4 adds an opt-in `venta_homekit_native.log_diagnostics` service that reports only safe status categories. It is **not** present in the installed 1.0.4 baseline. See [diagnostic service guide](DIAGNOSTICS.md).
+The installed Venta **1.2.0** includes an opt-in `venta_homekit_native.log_diagnostics` service returning only privacy-safe status categories. The archived **1.0.4** rollback baseline does not include this service. See [diagnostic service guide](DIAGNOSTICS.md).
 
 To file an issue use [Bug report](../.github/ISSUE_TEMPLATE/bug_report.yml). Include only:
 

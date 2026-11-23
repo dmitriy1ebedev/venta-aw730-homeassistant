@@ -77,5 +77,47 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("redacted", ids["actual"]["attributes"]["label"].lower())
         self.assertIn("IP/MAC", ids["safety"]["attributes"]["options"][0]["label"])
 
+    def test_ui_localizations_cover_every_wizard_and_repair_label(self):
+        """Both built-in locales must cover every actual Home Assistant UI key."""
+        component = ROOT / "custom_components/venta_homekit_native"
+        english_source = json.loads((component / "strings.json").read_text())
+        english = json.loads((component / "translations/en.json").read_text())
+        russian = json.loads((component / "translations/ru.json").read_text())
+
+        def flatten(values, prefix=""):
+            labels = {}
+            for key, value in values.items():
+                path = f"{prefix}.{key}" if prefix else key
+                if isinstance(value, dict):
+                    labels.update(flatten(value, path))
+                else:
+                    self.assertIsInstance(value, str, path)
+                    self.assertTrue(value.strip(), path)
+                    labels[path] = value
+            return labels
+
+        source_labels = flatten(english_source)
+        english_labels = flatten(english)
+        russian_labels = flatten(russian)
+        self.assertEqual(english_labels, source_labels)
+        self.assertEqual(set(russian_labels), set(source_labels))
+        self.assertGreaterEqual(len(source_labels), 70)
+        for section in ("config", "options", "issues"):
+            self.assertIn(section, russian)
+        self.assertIn("config.step.user.title", russian_labels)
+        self.assertIn("config.step.migrate_yaml.title", russian_labels)
+
+    def test_release_document_does_not_confuse_canary_and_formal_install(self):
+        release = (ROOT / "docs/RELEASE_1_2_0.md").read_text()
+        self.assertIn("GitHub PR #19 was merged", release)
+        self.assertIn("project_release_status=NOT_STARTED", release)
+        self.assertIn("Do not replay", release)
+        self.assertIn("Face ID", release)
+        self.assertIn("CI `45132027560`", release)
+        compatibility = (ROOT / "docs/compatibility.md").read_text()
+        self.assertIn("installed Venta **1.2.0**", compatibility)
+        self.assertIn("archived **1.0.4**", compatibility)
+
+
 if __name__ == "__main__":
     unittest.main()

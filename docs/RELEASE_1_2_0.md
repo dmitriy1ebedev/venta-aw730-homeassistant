@@ -1,16 +1,20 @@
 # Venta 1.2.0 — protected production release and rollback
 
-**State: H96 operational canary installed 2026-11-23; formal protected
-release pending.** The owner explicitly authorized a Remote Desktop Commander
-canary. Its private transaction receipt reads `VERIFIED`, the container runs
-Venta 1.2.0 and Home Assistant is healthy. This manual installation is NOT
-a protected-main merge, immutable tag, GitHub Release, Face ID recipe pin or
-`project_release_status=INSTALLED`. Those are distinct outstanding gates.
+**State as of 2026-11-23:** Owner-approved H96 operational canary runs
+Venta **1.2.0**, Home Assistant is healthy and the private canary receipt is
+`VERIFIED`. GitHub PR #19 was merged; an immutable GitHub Release
+[`v1.2.0`](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/releases/tag/v1.2.0)
+and its checksum-verified source archive were published. The public GitVerse
+mirror has independently passed CI on the same current source tree.
+**Formal MCPshka production release is not complete:**
+`project_release_status=NOT_STARTED` and the protected recipe is not Face ID
+pinned. These states must not be conflated. This canary did not perform the
+optional YAML-to-UI cutover or prove interactive Apple Home app operation.
 
 ## Why the production install is conservative
 
-The existing Venta 1.0.4 is a working YAML-managed extension of the
-**original** HomeKit bridge. Venta 1.2.0 adds an optional UI wizard and
+Before the approved canary, Venta 1.0.4 was the working YAML-managed
+extension of the **original** HomeKit bridge. Venta 1.2.0 adds an optional UI wizard and
 entity binding review but **does not migrate or remove the old YAML block
 during the package update**. Legacy configuration remains authoritative.
 No new HomeKit server, pairing reset, LocalTuya config edit, physical
@@ -22,9 +26,17 @@ and `VERSION`. The release zip is deterministic and must carry only
 the public integration. Existing custom templates and any original
 component files are preserved in an on-host private rollback directory.
 
-## The owner-approved release recipe
+## Formal release recipe (not yet Face ID-pinned)
 
-`.mcpshka/release.json` pins the exact commands:
+`.mcpshka/release.json` declares the historical 1.0.4 → 1.2.0 release
+procedure; it is **not** an approval or authorization to run again. Its
+preflight requires an installed 1.0.4 component, but H96 already runs 1.2.0.
+**Do not replay this version-specific install/restart** over the healthy canary.
+Formal adoption needs a newly reviewed, idempotent verify-only/adoption plan
+and the owner's separate Face ID approval; no restart is justified merely to
+change bookkeeping.
+
+The historical recipe includes:
 
 1. **Preflight:** Verify the installed version is 1.0.4, the new source is
    1.2.0, the running Home Assistant container is healthy, there is
@@ -75,18 +87,27 @@ health checks, treat production acceptance as failed and perform
 the separately approved rollback. No user credentials or pairing
 material are logged or uploaded.
 
-## Checks still required
+## Verified publication and remaining gates
 
-- Protected source merge and exact-release GitHub/GitVerse CI.
-- Immutable tag and GitHub Release of the exact approved 1.2.0 commit.
-- Face ID pin of the formal release recipe; actual H96 canary already
-  passed a controlled HA restart and preserved both original HomeKit bridge
-  identities, pairing material and the LocalTuya/Yaha exposed humidifier.
-  Direct Apple Home app functionality still needs independent acceptance.
-- Optional YAML→UI cutover only after separate explicit acceptance:
-  verify the existing bridge exact entry ID, backup, stage proposal,
-  remove YAML *after* safe migration, restart and verify no duplicate
-  HomeKit accessory. Any issue: restore prior snapshot.
+- **DONE — public release:** GitHub PR #19 merged; tag `v1.2.0` points to
+  immutable commit `49d0c64e`. Published ZIP SHA-256 starts `1d46a997`;
+  postpublication isolated HA smoke CI `45132027560` passed.
+- **DONE — current public source:** GitHub main CI `45140789084` passed 5/5;
+  GitVerse `validate.yml` run `2191055` succeeded on the identical source
+  tree, using safe fast-forward public mirroring without force-push.
+- **DONE — H96 operational canary:** Controlled restart, saved rollback to
+  1.0.4 and preservation of both original HomeKit bridge identities and the
+  LocalTuya/Yaha humidifier were verified. The owner accepted unchanged
+  behavior; no second restart or pairing change was necessary.
+- **PENDING — protected release record:** `project_release_status=NOT_STARTED`;
+  the existing 1.0.4-only preflight cannot be repeated against installed 1.2.0.
+  A separately approved adoption/verification procedure is required.
+- **PENDING — direct Apple Home UI acceptance:** A healthy container and
+  synthetic HomeKit tests are not a substitute for real interactive operation.
+- **DEFERRED — optional YAML→UI cutover:** Only after separate owner approval,
+  verify the exact existing bridge ID, backup, stage proposal, remove YAML
+  *after* safe migration, restart, and confirm no duplicate HomeKit accessory.
+  If anything differs, restore the previously verified snapshot.
 
 **Never** modify the live HA directory from an unreviewed dirty checkout,
 overwrite native backups, disclose HomeKit pairing data, or treat a manual
