@@ -68,15 +68,89 @@ class AdvisoryTests(unittest.TestCase):
         )
         monitor.update()
         self.assertEqual(calls, [])
-        monitor.update()
+        monitor.update("sensor.water")
         self.assertEqual([x[1] for x in calls], ["create"])
-        monitor.update()
+        monitor.update("sensor.water")
         self.assertEqual(len(calls), 1)
         states["sensor.water"].state = "80"
-        monitor.update()
+        monitor.update("sensor.water")
         self.assertEqual([x[1] for x in calls], ["create", "dismiss"])
         self.assertTrue(all(x[0] == "persistent_notification" for x in calls))
         self.assertTrue(all("local_key" not in str(x) for x in calls))
+
+    def test_unavailable_at_start_requires_real_transition(self):
+        from types import SimpleNamespace
+        import asyncio
+        calls = []
+        states = {
+            "humidifier.venta": SimpleNamespace(state="unavailable"),
+            "sensor.water": SimpleNamespace(state="0"),
+        }
+
+        class Services:
+            async def async_call(self, domain, action, data):
+                calls.append((action, data["notification_id"]))
+
+        class Hass:
+            services = Services()
+            def __init__(self):
+                self.states = states
+            def async_create_task(self, coro):
+                asyncio.run(coro)
+
+        monitor = module.ServiceAdvisoryMonitor(
+            Hass(), "humidifier.venta", {"water_level": "sensor.water"}
+        )
+        monitor.update()
+        monitor.update("sensor.water")
+        self.assertEqual(calls, [])
+        states["humidifier.venta"].state = "on"
+        monitor.update("humidifier.venta")
+        self.assertEqual(calls, [])
+        states["humidifier.venta"].state = "unavailable"
+        monitor.update("humidifier.venta")
+        self.assertEqual(calls, [("create", "venta_service_device_unavailable")])
+        states["humidifier.venta"].state = "on"
+        monitor.update("humidifier.venta")
+        self.assertEqual(calls[-1], ("dismiss", "venta_service_device_unavailable"))
+
+    def test_unrelated_sensor_does_not_confirm_or_dismiss_water(self):
+        from types import SimpleNamespace
+        import asyncio
+        calls = []
+        states = {
+            "humidifier.venta": SimpleNamespace(state="on"),
+            "sensor.water": SimpleNamespace(state="8"),
+            "sensor.filter": SimpleNamespace(state="20"),
+        }
+
+        class Services:
+            async def async_call(self, domain, action, data):
+                calls.append((action, data["notification_id"]))
+
+        class Hass:
+            services = Services()
+            def __init__(self):
+                self.states = states
+            def async_create_task(self, coro):
+                asyncio.run(coro)
+
+        monitor = module.ServiceAdvisoryMonitor(
+            Hass(), "humidifier.venta",
+            {"water_level": "sensor.water", "filter_days": "sensor.filter"},
+        )
+        monitor.update()
+        monitor.update("sensor.filter")
+        monitor.update("humidifier.venta")
+        self.assertEqual(calls, [])
+        monitor.update("sensor.water")
+        self.assertEqual(calls, [("create", "venta_service_check_water_level")])
+        states["sensor.filter"].state = "19"
+        monitor.update("sensor.filter")
+        self.assertEqual(len(calls), 1)
+        states["sensor.water"].state = "80"
+        monitor.update("sensor.water")
+        self.assertEqual(calls[-1], ("dismiss", "venta_service_check_water_level"))
 
     def test_no_first_sample_alarm(self):
         self.assertEqual(module.classify_service_state({"water_level": 0}, None, available=True), ())
