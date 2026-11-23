@@ -50,6 +50,8 @@ class OneShotReleaseWorkflowTests(unittest.TestCase):
             "gh release create v1.2.0",
         ):
             self.assertIn(required, self.commands)
+        self.assertIn('if ref_sha="$(gh api', self.commands)
+        self.assertNotIn('2>/dev/null || true', self.commands)
         self.assertNotIn("git push --force", self.commands)
         self.assertNotIn("gh release delete", self.commands)
 
