@@ -95,7 +95,16 @@ jobs:
           ARCHIVE_SHA256: ${{ steps.build.outputs.archive_sha256 }}
         run: |
           set -euo pipefail
-          existing="$(gh api "repos/$GH_REPO/git/ref/tags/v1.2.0" --jq '.object.sha' 2>/dev/null || true)"
+          # gh api can emit literal "null" on a missing ref before exiting 1.
+          # Never swallow that failed request *inside* command substitution.
+          existing=""
+          if ref_sha="$(gh api "repos/$GH_REPO/git/ref/tags/v1.2.0" --jq '.object.sha' 2>/dev/null)"; then
+            if [ -z "$ref_sha" ] || [ "$ref_sha" = "null" ]; then
+              echo "Invalid tag response; refusing publication"
+              exit 1
+            fi
+            existing="$ref_sha"
+          fi
           if [ -n "$existing" ]; then
             test "$existing" = "$CI_SHA" || { echo "Tag exists at a different object; refusing retag"; exit 1; }
           else
