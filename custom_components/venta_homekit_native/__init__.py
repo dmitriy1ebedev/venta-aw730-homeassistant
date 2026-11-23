@@ -533,8 +533,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         watched = (ENTITY, *sensor_entities.values())
 
         @callback
-        def on_service_state_change(_event: Event):
-            monitor.update()
+        def on_service_state_change(event: Event):
+            monitor.update(event.data.get("entity_id"))
 
         unsub = async_track_state_change_event(
             hass, watched, on_service_state_change,
