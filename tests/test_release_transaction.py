@@ -64,7 +64,7 @@ class VentaReleaseTransactionTests(unittest.TestCase):
             f".storage/homekit.{self.BRIDGE}.aids": b'{"data":{"aids":{}}}',
             f".storage/homekit.{self.BRIDGE}.iids": b'{"data":{"iids":{}}}',
             f".storage/homekit.{self.BRIDGE}.state":
-                b'{"private_key":"fixture","public_key":"fixture","paired_clients":{"fixture":{}}}',
+                b'{"private_key":"fixture","public_key":"fixture","paired_clients":{"fixture":{}},"config_version":1}',
         }
         for name, body in self.files.items():
             (self.root / name).write_bytes(body)
@@ -166,6 +166,70 @@ class VentaReleaseTransactionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "IDENTITY_DRIFT"):
             rel.verify(self.root, self.ledger, check_health=False)
 
+    def test_postboot_metadata_changes_do_not_trigger_rollback(self):
+        entry_file = self.root / ".storage/core.config_entries"
+        original = json.loads(entry_file.read_text())
+        original["data"]["entries"].append({
+            "entry_id": "unrelated_intents_entry", "domain": "yandex_station_intents",
+            "data": {"revision": 1}, "modified_at": "before",
+        })
+        entry_file.write_text(json.dumps(original))
+        self.stage()
+        self.install()
+        current = json.loads(entry_file.read_text())
+        current["data"]["entries"][-1]["data"] = {"revision": 2}
+        current["data"]["entries"][-1]["modified_at"] = "after"
+        entry_file.write_text(json.dumps(current))
+        state_file = self.root / f".storage/homekit.{self.BRIDGE}.state"
+        state = json.loads(state_file.read_text())
+        state["config_version"] += 1
+        state_file.write_text(json.dumps(state))
+        for _ in range(2):
+            self.assertEqual(rel.verify(self.root, self.ledger, check_health=False)["status"],
+                             "PRODUCTION_VERIFY_PASS")
+
+    def test_homekit_pairing_change_still_fails_verify(self):
+        self.stage()
+        self.install()
+        state_file = self.root / f".storage/homekit.{self.BRIDGE}.state"
+        value = json.loads(state_file.read_text())
+        value["paired_clients"]["intruder"] = {}
+        state_file.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError, "IDENTITY_DRIFT"):
+            rel.verify(self.root, self.ledger, check_health=False)
+
+    def test_decreasing_homekit_config_version_fails_verify(self):
+        self.stage()
+        self.install()
+        state_file = self.root / f".storage/homekit.{self.BRIDGE}.state"
+        value = json.loads(state_file.read_text())
+        value["config_version"] = 0
+        state_file.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError, "IDENTITY_DRIFT"):
+            rel.verify(self.root, self.ledger, check_health=False)
+
+    def test_homekit_bridge_config_entry_change_fails_verify(self):
+        self.stage()
+        self.install()
+        path = self.root / ".storage/core.config_entries"
+        value = json.loads(path.read_text())
+        value["data"]["entries"][0]["options"]["filter"]["include_entities"] = []
+        path.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError, "IDENTITY_DRIFT"):
+            rel.verify(self.root, self.ledger, check_health=False)
+
+    def test_duplicate_entry_id_fails_verify_even_if_unrelated(self):
+        self.stage()
+        self.install()
+        path = self.root / ".storage/core.config_entries"
+        value = json.loads(path.read_text())
+        other = dict(value["data"]["entries"][0])
+        other["domain"] = "unrelated"
+        value["data"]["entries"].append(other)
+        path.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError, "IDENTITY_DRIFT"):
+            rel.verify(self.root, self.ledger, check_health=False)
+
     def test_rollback_after_live_update_stops_ha_then_restores_pairing(self):
         self.stage()
         self.install()
@@ -180,6 +244,51 @@ class VentaReleaseTransactionTests(unittest.TestCase):
         self.assertEqual(state.read_bytes(), self.files[
             f".storage/homekit.{self.BRIDGE}.state"
         ])
+        self.assertEqual(
+            rel.verify_rollback(self.root, self.ledger, check_health=False)["status"],
+            "ROLLBACK_VERIFIED",
+        )
+
+    def test_rollback_preserves_unrelated_ha_changes_and_hap_revision(self):
+        self.stage()
+        self.install()
+        entry_file = self.root / ".storage/core.config_entries"
+        contents = json.loads(entry_file.read_text())
+        contents["data"]["entries"].append({
+            "domain": "unrelated", "entry_id": "keep-new-integration",
+            "data": {"new_setting": True},
+        })
+        entry_file.write_text(json.dumps(contents))
+        state_file = self.root / f".storage/homekit.{self.BRIDGE}.state"
+        state = json.loads(state_file.read_text())
+        state["config_version"] += 1
+        state_file.write_text(json.dumps(state))
+        with patch.object(rel.subprocess, "run", side_effect=[
+            SimpleNamespace(returncode=0, stdout="true"),
+            SimpleNamespace(returncode=0),
+        ]):
+            self.assertEqual(
+                rel.rollback(self.root, self.ledger)["status"],
+                "ROLLBACK_FILES_RESTORED",
+            )
+        remaining = json.loads(entry_file.read_text())
+        self.assertEqual(len(remaining["data"]["entries"]), 2)
+        self.assertEqual(json.loads(state_file.read_text())["config_version"], 2)
+        self.assertEqual(
+            rel.verify_rollback(self.root, self.ledger, check_health=False)["status"],
+            "ROLLBACK_VERIFIED",
+        )
+
+    def test_missing_config_entries_is_restored_during_rollback(self):
+        self.stage()
+        self.install()
+        config = self.root / ".storage/core.config_entries"
+        config.unlink()
+        with patch.object(rel.subprocess, "run", side_effect=[
+            SimpleNamespace(returncode=0, stdout="true"),
+            SimpleNamespace(returncode=0),
+        ]):
+            rel.rollback(self.root, self.ledger)
         self.assertEqual(
             rel.verify_rollback(self.root, self.ledger, check_health=False)["status"],
             "ROLLBACK_VERIFIED",

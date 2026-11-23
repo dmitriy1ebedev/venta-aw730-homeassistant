@@ -251,6 +251,72 @@ def install(root: Path, ledger: Path) -> dict:
     return {"stage": "INSTALLED_NEEDS_RESTART", "version": NEW}
 
 
+PROTECTED_ENTRY_DOMAINS = frozenset({
+    "homekit", "localtuya", "yandex_smart_home", DOMAIN,
+})
+
+
+def protected_identity_matches(before: bytes, after: bytes, rel: str) -> bool:
+    """Preserve pairing and device bindings, not unrelated HA runtime writes.
+
+    HomeKit may increment its configuration revision after boot while keeping
+    its keys, paired clients, accessory hash, AIDs and IIDs identical. HA also
+    writes other integrations' config-entry metadata asynchronously. Neither
+    normal change may induce an unnecessary appliance/service rollback.
+    """
+    if before == after:
+        return True
+    if rel.endswith(".state") and rel.startswith(".storage/homekit."):
+        try:
+            old, new = json.loads(before), json.loads(after)
+            if not isinstance(old, dict) or not isinstance(new, dict):
+                return False
+            a, b = old.get("config_version"), new.get("config_version")
+            if (type(a) is not int or type(b) is not int or b < a):
+                return False
+            old = {k: v for k, v in old.items() if k != "config_version"}
+            new = {k: v for k, v in new.items() if k != "config_version"}
+            return old == new
+        except (TypeError, ValueError):
+            return False
+    if rel == ".storage/core.config_entries":
+        try:
+            old, new = json.loads(before), json.loads(after)
+            if not isinstance(old, dict) or not isinstance(new, dict):
+                return False
+            if set(old) != set(new) or any(
+                old[k] != new[k] for k in old if k != "data"
+            ):
+                return False
+            oa, na = old["data"], new["data"]
+            if (not isinstance(oa, dict) or not isinstance(na, dict)
+                or set(oa) != set(na) or any(
+                    oa[k] != na[k] for k in oa if k != "entries"
+                )):
+                return False
+
+            def protected(entries: object) -> dict[str, dict]:
+                if not isinstance(entries, list):
+                    raise ValueError("invalid_entries")
+                records: dict[str, dict] = {}
+                ids: set[str] = set()
+                for row in entries:
+                    if not isinstance(row, dict):
+                        raise ValueError("invalid_entry")
+                    ident = row.get("entry_id")
+                    if not isinstance(ident, str) or not ident or ident in ids:
+                        raise ValueError("duplicate_or_missing_entry_id")
+                    ids.add(ident)
+                    if row.get("domain") in PROTECTED_ENTRY_DOMAINS:
+                        records[ident] = row
+                return records
+
+            return protected(oa["entries"]) == protected(na["entries"])
+        except (TypeError, ValueError, KeyError):
+            return False
+    return False
+
+
 def verify(root: Path, ledger: Path, *, check_health: bool = True) -> dict:
     p = paths(root, ledger, NEW)
     meta = receipt(p["meta"])
@@ -258,11 +324,12 @@ def verify(root: Path, ledger: Path, *, check_health: bool = True) -> dict:
         or manifest_version(p["live"] / "manifest.json") != NEW):
         raise ValueError("candidate_not_installed")
     for rel, original_sha in meta["originals"].items():
-        # The integration manifest is deliberately upgraded to 1.2.0;
-        # preserve the other five original HA/YAML/HomeKit files exactly.
         if rel == f"custom_components/{DOMAIN}/manifest.json":
-            continue
-        if sha(safe_regular(root / rel)) != original_sha:
+            continue  # The only intentionally replaced integration file.
+        original = safe_regular(p["guard"] / rel)
+        if sha(original) != original_sha:
+            raise ValueError("private_release_guard_corrupt")
+        if not protected_identity_matches(original, safe_regular(root / rel), rel):
             raise ValueError("IDENTITY_DRIFT_or_config_entry_changed")
     if check_health and not healthy():
         raise RuntimeError("HEALTH_PENDING")
@@ -322,6 +389,18 @@ def rollback(root: Path, ledger: Path, *, restore_storage: bool = True) -> dict:
             if sha(blob) != checksum:
                 raise ValueError("private_rollback_snapshot_corrupt")
             dest = root / rel
+            if rel == ".storage/core.config_entries" or (
+                rel.startswith(".storage/homekit.") and rel.endswith(".state")
+            ):
+                # Preserve unrelated config-entry writes and monotonic HomeKit
+                # config_version when the protected identities are unchanged.
+                # If the protected binding really drifted, restore the guard.
+                if dest.is_symlink():
+                    raise ValueError("unsafe_live_storage_symlink")
+                # A missing file must be restored, not block rollback.
+                current = safe_regular(dest) if dest.is_file() else None
+                if current is not None and protected_identity_matches(blob, current, rel):
+                    continue
             temp = dest.with_name(dest.name + ".venta-restore")
             if temp.exists() or temp.is_symlink():
                 raise ValueError("unresolved_rollback_temporary_file")
@@ -357,7 +436,10 @@ def verify_rollback(root: Path, ledger: Path, *, check_health: bool = True) -> d
     if meta["status"] != "ROLLED_BACK" or manifest_version(p["live"] / "manifest.json") != EXPECTED_OLD:
         raise ValueError("rollback_component_not_restored")
     for rel, checksum in meta["originals"].items():
-        if sha(safe_regular(root / rel)) != checksum:
+        original = safe_regular(p["guard"] / rel)
+        if sha(original) != checksum:
+            raise ValueError("private_rollback_snapshot_corrupt")
+        if not protected_identity_matches(original, safe_regular(root / rel), rel):
             raise ValueError("rollback_snapshot_not_restored")
     if check_health and not healthy():
         raise RuntimeError("ROLLBACK_HEALTH_PENDING")

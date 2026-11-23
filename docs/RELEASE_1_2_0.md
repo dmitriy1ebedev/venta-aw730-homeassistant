@@ -1,10 +1,11 @@
 # Venta 1.2.0 — protected production release and rollback
 
-**State: candidate only.** The owner must approve the exact
-`.mcpshka/release.json` by Face ID and the source must be merged to a
-clean protected `main`. These conditions are enforced by MCPshka
-`project_release`; a passing PR, sealed test or source archive is not an
-installed release.
+**State: H96 operational canary installed 2026-11-23; formal protected
+release pending.** The owner explicitly authorized a Remote Desktop Commander
+canary. Its private transaction receipt reads `VERIFIED`, the container runs
+Venta 1.2.0 and Home Assistant is healthy. This manual installation is NOT
+a protected-main merge, immutable tag, GitHub Release, Face ID recipe pin or
+`project_release_status=INSTALLED`. Those are distinct outstanding gates.
 
 ## Why the production install is conservative
 
@@ -43,22 +44,31 @@ component files are preserved in an on-host private rollback directory.
    state.
 4. **Restart:** One controlled `docker restart homeassistant` through
    the owner-approved release recipe.
-5. **Verify:** The Home Assistant container returns to healthy and its
-   YAML, config-entry storage, AID/IID maps and HomeKit pairing state
-   still match their pre-upgrade bytes. The only expected changed file
-   is the Venta integration manifest, now 1.2.0. No UI migration occurs
-   automatically.
+5. **Verify:** The Home Assistant container returns to healthy. YAML,
+   HomeKit AID/IID maps, existing bridge and LocalTuya/Yaha config-entry
+   identities, all pairing keys/paired clients and accessories hash must
+   remain unchanged. HA may legitimately rewrite unrelated integrations'
+   config-entry metadata after boot; HomeKit may increment its integer
+   `config_version` while keeping all other `.state` fields identical.
+   Reject any changed protected entry, removed pairing, changed AID/IID,
+   modified accessory hash or decreasing HAP configuration revision.
+   The installed component's manifest must read 1.2.0. No YAML-to-UI
+   migration occurs automatically.
 
 Any install/restart/verification failure triggers the recipe's **own
 rollback**: pre-validate the private snapshots, stop HA if the live
-component was changed, put back the entire original component and all
-six selected files, start HA and wait for healthy. A pre-install error
+component was changed, put back the original component and protected
+pairing snapshot, start HA and wait for healthy. If HA has already made
+unrelated config-entry updates or raised HomeKit's harmless config revision,
+preserve those newer fields when the original protected identities match.
+A pre-install error
 does **not** stop HA or rewrite its storage. A corrupt rollback snapshot
 is rejected *before* stopping HA. The previous component and failed
 candidate stay available for diagnosis.
 
-The release manager is the only authority to report `INSTALLED`.
-Immediately afterward, use MCPshka read-only HA checks and compare
+Only `project_release_status=INSTALLED` confirms the formal protected
+release; the separate owner-authorized H96 canary has a private verified
+transaction receipt. Independently compare
 original Venta, other HomeKit accessories and Yandex Cloud exports.
 If any real-world Apple Home or LocalTuya behavior is wrong despite
 health checks, treat production acceptance as failed and perform
@@ -69,12 +79,16 @@ material are logged or uploaded.
 
 - Protected source merge and exact-release GitHub/GitVerse CI.
 - Immutable tag and GitHub Release of the exact approved 1.2.0 commit.
-- Face ID pin of the release recipe, supervised production restart
-  and verification of the real Venta/other original HomeKit accessories.
+- Face ID pin of the formal release recipe; actual H96 canary already
+  passed a controlled HA restart and preserved both original HomeKit bridge
+  identities, pairing material and the LocalTuya/Yaha exposed humidifier.
+  Direct Apple Home app functionality still needs independent acceptance.
 - Optional YAML→UI cutover only after separate explicit acceptance:
   verify the existing bridge exact entry ID, backup, stage proposal,
   remove YAML *after* safe migration, restart and verify no duplicate
   HomeKit accessory. Any issue: restore prior snapshot.
 
-**Never** run this script from an unapproved dirty checkout or copy a
-candidate manually into the live HA directory to bypass MCPshka.
+**Never** modify the live HA directory from an unreviewed dirty checkout,
+overwrite native backups, disclose HomeKit pairing data, or treat a manual
+canary as an approved protected release. Maintain the private prior-version
+snapshot until Apple Home functionality and release provenance are accepted.
