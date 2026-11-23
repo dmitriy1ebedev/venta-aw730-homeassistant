@@ -2,6 +2,50 @@
 from dataclasses import dataclass
 from math import isfinite
 
+SERVICE_ROLES = ("water_level", "filter_days", "cleaning_days", "service_days")
+
+
+def eligible_service_sensor_ids(registry, humidifier_entity):
+    """Only active LocalTuya sensors registered to this exact humidifier."""
+    entities = getattr(registry, "entities", {})
+    humidifier = entities.get(humidifier_entity)
+    if (
+        humidifier is None
+        or getattr(humidifier, "platform", None) != "localtuya"
+        or not getattr(humidifier, "device_id", None)
+        or not getattr(humidifier, "config_entry_id", None)
+    ):
+        return ()
+    result = []
+    for entity_id, item in entities.items():
+        if (
+            isinstance(entity_id, str)
+            and entity_id.startswith("sensor.")
+            and getattr(item, "platform", None) == "localtuya"
+            and getattr(item, "device_id", None) == humidifier.device_id
+            and getattr(item, "config_entry_id", None) == humidifier.config_entry_id
+            and getattr(item, "disabled_by", None) is None
+            and getattr(item, "hidden_by", None) is None
+        ):
+            result.append(entity_id)
+    return tuple(sorted(result))
+
+
+def validated_service_entities(registry, humidifier_entity, configured):
+    """Reject foreign/stale mappings rather than reading another device."""
+    if not isinstance(configured, dict):
+        return {}
+    allowed = set(eligible_service_sensor_ids(registry, humidifier_entity))
+    result = {}
+    for role in SERVICE_ROLES:
+        entity_id = configured.get(role)
+        if isinstance(entity_id, str) and entity_id in allowed:
+            result[role] = entity_id
+    if len(result) != len(set(result.values())):
+        return {}
+    return result
+
+
 @dataclass(frozen=True)
 class Advisory:
     kind: str

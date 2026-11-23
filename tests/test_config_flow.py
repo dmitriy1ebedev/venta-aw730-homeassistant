@@ -499,6 +499,51 @@ class VentaFlowTests(unittest.TestCase):
         result = self.stage_options(options)
         self.assertEqual(result["data"], {"unrelated": 123})
 
+    def test_service_sensors_are_opt_in_and_staged_without_live_changes(self):
+        entry, options = self.make_configured_entry()
+        self.entities["sensor.water"] = entity("sensor.water")
+        original = dict(entry.data)
+        base = {
+            "bridge_entry_id": "existing-bridge",
+            **self.mapping,
+            "water_level_entity": "sensor.water",
+            "confirm_staging": True,
+        }
+        bad = self.run_flow(options.async_step_init(base))
+        self.assertEqual(bad["errors"]["base"], "service_monitoring_confirmation_required")
+        base["confirm_service_monitoring"] = True
+        good = self.run_flow(options.async_step_init(base))
+        self.assertEqual(good["type"], "create_entry")
+        self.assertEqual(
+            good["data"]["service_advisory_entities"],
+            {"water_level": "sensor.water"},
+        )
+        self.assertEqual(entry.options, {})
+        self.assertEqual(entry.data, original)
+        self.assertEqual(self.entry_updates, [])
+
+    def test_service_sensor_cross_device_is_rejected(self):
+        entry, options = self.make_configured_entry()
+        self.entities["sensor.unrelated"] = entity(
+            "sensor.unrelated", device="different-device"
+        )
+        result = self.stage_options(
+            options, water_level_entity="sensor.unrelated",
+            confirm_service_monitoring=True,
+        )
+        self.assertEqual(result["errors"]["water_level_entity"], "invalid_entity")
+        self.assertEqual(entry.options, {})
+
+    def test_service_sensor_disable_preserves_unrelated_options(self):
+        entry, options = self.make_configured_entry()
+        self.entities["sensor.water"] = entity("sensor.water")
+        entry.options = {
+            "service_advisory_entities": {"water_level": "sensor.water"},
+            "unrelated": 123,
+        }
+        result = self.stage_options(options, water_level_entity="")
+        self.assertEqual(result["data"], {"unrelated": 123})
+
     def test_options_yaml_owner_prevents_review(self):
         entry, options = self.make_configured_entry()
         self.hass.data[DOMAIN] = {"patched": True}

@@ -152,5 +152,40 @@ class AdvisoryTests(unittest.TestCase):
         monitor.update("sensor.water")
         self.assertEqual(calls[-1], ("dismiss", "venta_service_check_water_level"))
 
+    def test_service_mapping_revalidates_localtuya_device_ownership(self):
+        from types import SimpleNamespace
+
+        def entity(device="venta", config="localtuya-1", platform="localtuya",
+                   disabled=None):
+            return SimpleNamespace(
+                device_id=device, config_entry_id=config, platform=platform,
+                disabled_by=disabled, hidden_by=None,
+            )
+
+        entries = {
+            "humidifier.venta": entity(),
+            "sensor.water": entity(),
+            "sensor.filter": entity(),
+            "sensor.other": entity(device="other"),
+            "sensor.cloud": entity(platform="cloud"),
+            "sensor.off": entity(disabled="user"),
+        }
+        registry = SimpleNamespace(entities=entries)
+        allowed = module.eligible_service_sensor_ids(registry, "humidifier.venta")
+        self.assertEqual(allowed, ("sensor.filter", "sensor.water"))
+        mapping = module.validated_service_entities(registry, "humidifier.venta", {
+            "water_level": "sensor.water",
+            "filter_days": "sensor.filter",
+            "cleaning_days": "sensor.other",
+            "service_days": "sensor.off",
+        })
+        self.assertEqual(mapping, {
+            "water_level": "sensor.water", "filter_days": "sensor.filter",
+        })
+        self.assertEqual(module.validated_service_entities(
+            registry, "humidifier.venta",
+            {"water_level": "sensor.water", "filter_days": "sensor.water"},
+        ), {})
+
     def test_no_first_sample_alarm(self):
         self.assertEqual(module.classify_service_state({"water_level": 0}, None, available=True), ())
