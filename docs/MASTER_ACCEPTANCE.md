@@ -31,6 +31,19 @@ The existing same-process replay and official config-entry setup,
 Options, Reconfigure, Repairs and registry smoke checks continue to
 run. A passing capture alone is **not** a passing cross-process gate.
 
+## Synthetic YAML snapshot rollback rehearsal
+
+Both HA-version CI jobs also operate on the exact, publicly known
+`FAKE_HA_CONFIG` source fixture, not the owner's data. A separate temporary
+snapshot captures its original `configuration.yaml` bytes and SHA-256,
+and the rehearsal removes only the fake `venta_homekit_native:` block.
+The test writes a **separate synthetic config-entry proposal** outside HA's
+`.storage`, verifies `check_config` of the cutover fixture in the real HA
+container, then restores the original YAML byte-for-byte and validates it
+with `check_config` again. Missing or corrupted backups, modified YAML,
+symlinks and tampered staged entries cause fail-closed errors. No actual
+config entry is installed by this rehearsal.
+
 ## Acceptance gap and rollback
 
 This gate does **not** exercise Home Assistant's actual persisted config
