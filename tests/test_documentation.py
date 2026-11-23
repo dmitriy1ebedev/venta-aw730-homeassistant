@@ -61,6 +61,12 @@ class DocumentationContractTests(unittest.TestCase):
         for value in ("AW730", "2026.11.1", "2026.10.0", "3.4", "Unverified", "sync_managed_template"):
             self.assertIn(value, matrix)
         self.assertIn("not independently verified", matrix)
+        self.assertIn("**2026.11.2**", matrix)
+        self.assertIn("**TESTED IN ISOLATION**", matrix)
+        self.assertIn("**PENDING / NOT TESTED**", matrix)
+        self.assertIn("**1.2.0**", matrix)
+        self.assertIn("45137841054", matrix)
+        self.assertIn("never modify the working existing bridge", matrix.lower())
         form = yaml.safe_load((ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml").read_text())
         ids = {field.get("id"): field for field in form["body"] if field.get("id")}
         for required in ("ha_version", "localtuya_version", "venta_version", "venta_model", "affected", "steps", "expected", "actual", "safety"):
