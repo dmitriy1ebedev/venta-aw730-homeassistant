@@ -32,6 +32,7 @@ class OneShotReleaseWorkflowTests(unittest.TestCase):
             "workflow_run.event == 'push'",
             "workflow_run.head_branch == 'main'",
             "workflow_run.head_repository.full_name == github.repository",
+            "workflow_run.head_sha == '49d0c64e4a20421c16729b393fb82cb62de1490f'",
         ):
             self.assertIn(required, guard)
 
