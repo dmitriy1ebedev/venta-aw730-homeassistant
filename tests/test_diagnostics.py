@@ -85,7 +85,7 @@ class DiagnosticsContractTests(unittest.TestCase):
     def test_healthy_baseline_includes_only_allowlisted_versions_and_status(self):
         report = self.collect()
         self.assertEqual(report["schema"], 1)
-        self.assertEqual(report["integration_version"], "1.0.4")
+        self.assertEqual(report["integration_version"], "1.2.0")
         self.assertEqual(report["home_assistant_version"], "2026.11.1")
         self.assertEqual(report["localtuya_version"], "2026.10.0")
         self.assertEqual(report["configuration"], "complete")

@@ -1,9 +1,11 @@
 # Venta 1.2.0 — safe entity association (V120-02 preview)
 
-**Source-only preview. This is not yet an installed setup wizard.** No change
-to existing seven-key YAML installations, HomeKit pairing or LocalTuya config
-entries is made by adding this module. The installed 1.0.4 release does not
-include it, and the separate 1.0.5 maintenance candidate excludes it.
+**Development branch only; not installed or accepted for release.** The
+P03.1 config flow now combines this read-only discovery with explicit bridge
+and role selection. The existing seven-key YAML installation, HomeKit pairing,
+and LocalTuya configuration remain unchanged. The installed 1.0.4 and the
+separate 1.0.5 maintenance release do not include this candidate. It must pass
+disposable Home Assistant runtime acceptance before any real installation.
 
 ## Trust boundary
 
@@ -44,10 +46,34 @@ the entity registry on submit**.
   2026.11.2 entity-registry API imports, using synthetic fixtures and a network-
   disabled container.
 
-**Not yet implemented:** UI entity selectors and confirmation screens,
-config_flow, source YAML import, persistence of a config entry, options,
-repair flow and a live HomeKit migration. Those are separate P03 roadmap
-acceptance gates. This helper is only a security-critical building block.
+**P03.1 worktree candidate:** config_flow.py provides source/bridge selectors,
+explicit role confirmation, config-entry persistence, duplicate prevention and
+revalidation at submit and setup. Replaying the same config entry must not
+register listeners twice; a different entry or changed role mapping must fail
+closed without retargeting the running HomeKit accessory. tests/test_config_flow.py
+and tests/test_config_entry_lifecycle.py cover these invariants off-device.
+The isolated HA 2026.11.1/2026.11.2 workflow additionally runs both the real
+ConfigFlow smoke (scripts/ha_config_flow_smoke.py) and the real integration's
+setup_entry/replay smoke (scripts/ha_config_entry_setup_smoke.py). Both use
+in-memory fake registries with no HomeKit server or LocalTuya connection.
+
+**V120-03 stacked candidate:** interactive, owner-confirmed YAML transfer
+with pinned HomeKit bridge ID, an explicit backup acknowledgement and a
+restart-bound rollback path. See [YAML migration](YAML_MIGRATION.md).
+Automated `SOURCE_IMPORT` is rejected rather than silently creating a new
+bridge or duplicate entry. Synthetic migration tests are not a live HA
+restore test.
+
+**V120-04 stacked candidate:** Options reviews and stores an inert proposal;
+Reconfigure can save validated same-bridge roles only with explicit backup and
+restart acknowledgements; Repairs verifies restored original bindings without
+guessing entities, restarting HA or resetting HomeKit. See
+[Options and Repairs](OPTIONS_AND_REPAIRS.md). New issues contain only a
+fixed reason and a config-entry reference, never physical device credentials.
+
+**Still pending:** V120-03 disposable restart/rollback acceptance, V120-04
+end-to-end restart/repair acceptance, safe live unload, and an owner-approved
+production canary (P03.5). A green synthetic smoke does not authorize rollout.
 No saved device IDs, LocalTuya local keys or pairing data should be placed in
 test fixtures, logs or GitHub issues.
 

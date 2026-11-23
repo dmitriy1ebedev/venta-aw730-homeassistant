@@ -1,0 +1,123 @@
+{
+  "schema": "mcpshka.release/v1",
+  "version_file": "VERSION",
+  "steps": [
+    {
+      "name": "preflight",
+      "root": true,
+      "argv": [
+        "/usr/bin/python3",
+        "{root}/scripts/ha_release_transaction.py",
+        "--phase",
+        "preflight",
+        "--version",
+        "{version}"
+      ],
+      "timeout_seconds": 120,
+      "expect": "PREFLIGHT_PASS"
+    },
+    {
+      "name": "stage",
+      "root": true,
+      "argv": [
+        "/usr/bin/python3",
+        "{root}/scripts/ha_release_transaction.py",
+        "--phase",
+        "stage",
+        "--version",
+        "{version}"
+      ],
+      "timeout_seconds": 180,
+      "expect": "READY"
+    },
+    {
+      "name": "install",
+      "root": true,
+      "argv": [
+        "/usr/bin/python3",
+        "{root}/scripts/ha_release_transaction.py",
+        "--phase",
+        "install",
+        "--version",
+        "{version}"
+      ],
+      "timeout_seconds": 90,
+      "expect": "INSTALLED_NEEDS_RESTART"
+    },
+    {
+      "name": "restart",
+      "root": true,
+      "argv": [
+        "/usr/bin/docker",
+        "restart",
+        "--time",
+        "30",
+        "homeassistant"
+      ],
+      "timeout_seconds": 240,
+      "expect": "homeassistant"
+    },
+    {
+      "name": "verify",
+      "root": true,
+      "argv": [
+        "/usr/bin/python3",
+        "{root}/scripts/ha_release_transaction.py",
+        "--phase",
+        "verify",
+        "--version",
+        "{version}"
+      ],
+      "timeout_seconds": 360,
+      "retry_seconds": 12,
+      "expect": "PRODUCTION_VERIFY_PASS",
+      "fail": "IDENTITY_DRIFT"
+    }
+  ],
+  "rollback_from": "install",
+  "rollback": {
+    "name": "restore",
+    "root": true,
+    "argv": [
+      "/usr/bin/python3",
+      "{root}/scripts/ha_release_transaction.py",
+      "--phase",
+      "rollback",
+      "--version",
+      "{version}"
+    ],
+    "timeout_seconds": 180,
+    "expect": "ROLLBACK_FILES_RESTORED"
+  },
+  "rollback_then": [
+    {
+      "name": "start-previous",
+      "root": true,
+      "argv": [
+        "/usr/bin/python3",
+        "{root}/scripts/ha_release_transaction.py",
+        "--phase",
+        "ensure-start",
+        "--version",
+        "{version}"
+      ],
+      "timeout_seconds": 100,
+      "expect": "HOMEASSISTANT_STARTED_OR_ALREADY_RUNNING"
+    },
+    {
+      "name": "verify-previous",
+      "root": true,
+      "argv": [
+        "/usr/bin/python3",
+        "{root}/scripts/ha_release_transaction.py",
+        "--phase",
+        "verify-rollback",
+        "--version",
+        "{version}"
+      ],
+      "timeout_seconds": 360,
+      "retry_seconds": 12,
+      "expect": "ROLLBACK_VERIFIED"
+    }
+  ]
+}

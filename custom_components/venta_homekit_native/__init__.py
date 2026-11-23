@@ -394,6 +394,10 @@ async def _reload_when_bridge_ready(hass: HomeAssistant) -> None:
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     global ENTITY, BRIDGE_ENTRY, FAN, LED, BRIGHTNESS, TEMPERATURE, HUMIDITY, EXTRA_ENTITIES
     values = config.get(DOMAIN)
+    # No YAML is normal for a UI-configured installation; the config entry
+    # is validated and set up separately. Existing seven-key YAML is unchanged.
+    if values is None:
+        return True
     names = ("humidifier_entity", "bridge_title", "fan_entity", "led_entity",
              "brightness_entity", "temperature_entity", "humidity_entity")
     if not isinstance(values, dict) or any(
@@ -402,19 +406,51 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     ):
         _LOGGER.error("Venta: configuration.yaml must define all seven options")
         return False
-    matching = [e for e in hass.config_entries.async_entries("homekit")
-                if e.title == values["bridge_title"]]
+    # YAML keeps title matching. Config entries also pin the exact bridge ID
+    # so duplicate titles can never redirect a configured Venta accessory.
+    bridge_id = values.get("bridge_entry_id")
+    matching = [
+        e for e in hass.config_entries.async_entries("homekit")
+        if (e.entry_id == bridge_id if bridge_id else e.title == values["bridge_title"])
+    ]
     if len(matching) != 1:
-        _LOGGER.error("Venta: existing HomeKit bridge title must match exactly")
+        _LOGGER.error("Venta: existing HomeKit bridge identity must match exactly")
         return False
     bridge = matching[0]
     if bridge.options.get("mode", "bridge") != "bridge":
         _LOGGER.error("Venta: entry must be a HomeKit bridge")
         return False
-    included = bridge.options.get("filter", {}).get("include_entities", [])
-    if included and values["humidifier_entity"] not in included:
+    bridge_filter = bridge.options.get("filter") or {}
+    included = bridge_filter.get("include_entities") or []
+    excluded = bridge_filter.get("exclude_entities") or []
+    if (included and values["humidifier_entity"] not in included) or (
+        values["humidifier_entity"] in excluded
+    ):
         _LOGGER.error("Venta: humidifier must be included in existing HomeKit bridge")
         return False
+    original = TYPES.get("HumidifierDehumidifier")
+    if original is _venta_accessory_factory and hass.data.get(DOMAIN, {}).get("patched"):
+        # Repeated setup is idempotent only for the same exact accessory and
+        # bridge. Reject another config entry rather than switching globals.
+        if (
+            ENTITY == values["humidifier_entity"]
+            and BRIDGE_ENTRY == bridge.entry_id
+            and FAN == values["fan_entity"]
+            and LED == values["led_entity"]
+            and BRIGHTNESS == values["brightness_entity"]
+            and TEMPERATURE == values["temperature_entity"]
+            and HUMIDITY == values["humidity_entity"]
+        ):
+            return True
+        _LOGGER.error("Venta: existing accessory binding differs; refusing to retarget")
+        return False
+    if original is not NativeHumidifierDehumidifier:
+        _LOGGER.error("Unexpected HomeKit registry: refusing to patch")
+        return False
+    if not _homekit_apis_compatible():
+        _LOGGER.error("Incompatible HomeKit/PyHAP API: refusing to patch")
+        return False
+    # No mutable globals change until all singleton and API gates pass.
     ENTITY = values["humidifier_entity"]
     BRIDGE_ENTRY = bridge.entry_id
     FAN = values["fan_entity"]
@@ -423,18 +459,16 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     TEMPERATURE = values["temperature_entity"]
     HUMIDITY = values["humidity_entity"]
     EXTRA_ENTITIES = (FAN, LED, BRIGHTNESS, TEMPERATURE)
-    original = TYPES.get("HumidifierDehumidifier")
-    if original is _venta_accessory_factory and hass.data.get(DOMAIN, {}).get("patched"):
-        # Repeated setup must not schedule another reload or duplicate services.
-        return True
-    if original is not NativeHumidifierDehumidifier:
-        _LOGGER.error("Unexpected HomeKit registry: refusing to patch")
-        return False
-    if not _homekit_apis_compatible():
-        _LOGGER.error("Incompatible HomeKit/PyHAP API: refusing to patch")
-        return False
     TYPES["HumidifierDehumidifier"] = _venta_accessory_factory
     hass.data[DOMAIN] = {"original": original, "patched": True}
+    if not values.get("migration_from_yaml"):
+        # Preserve a read-only, exact in-memory migration proposal. YAML owns
+        # the active accessory until the owner removes YAML and restarts HA.
+        # The stable bridge ID prevents title collisions after migration.
+        hass.data[DOMAIN]["legacy_yaml"] = {
+            key: values[key] for key in names
+        }
+        hass.data[DOMAIN]["legacy_yaml"]["bridge_entry_id"] = bridge.entry_id
 
     # Marketplace replaces this integration's files, not LocalTuya's template
     # picker directory. Keep only a known, unchanged copy synchronized.
@@ -490,3 +524,96 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
     _LOGGER.info("Venta native HomeKit accessory extension registered")
     return True
+
+
+def _binding_issue_id(entry) -> str:
+    """Stable issue per config entry; no device identifiers or secrets."""
+    return f"binding_{entry.entry_id}"
+
+
+def _report_binding_issue(hass: HomeAssistant, entry) -> None:
+    """Surface missing LocalTuya mappings in HA Repairs, never auto-repair."""
+    try:
+        from homeassistant.helpers import issue_registry as ir
+
+        ir.async_create_issue(
+            hass, DOMAIN, _binding_issue_id(entry),
+            config_entry_id=entry.entry_id,
+            data={"entry_id": entry.entry_id},
+            is_fixable=True,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="binding_unavailable",
+        )
+    except (ImportError, RuntimeError, ValueError, AttributeError):
+        # Repairs metadata must never prevent HomeKit's fail-closed return.
+        _LOGGER.warning("Venta binding review could not register a repair issue")
+
+
+def _clear_binding_issue(hass: HomeAssistant, entry) -> None:
+    """Remove only our own resolved issue after successful binding setup."""
+    try:
+        from homeassistant.helpers import issue_registry as ir
+
+        ir.async_delete_issue(hass, DOMAIN, _binding_issue_id(entry))
+    except (ImportError, RuntimeError, ValueError, AttributeError):
+        _LOGGER.warning("Venta binding issue cleanup was unavailable")
+
+
+async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
+    """Set up one approved UI mapping without creating any HA entities.
+
+    The legacy YAML bridge is authoritative until explicitly migrated in
+    V120-03. A second entry may never take over the singleton HAP factory.
+    """
+    from .entity_discovery import DiscoveryError, validate_from_hass
+
+    active = hass.data.get(DOMAIN, {})
+    if active.get("patched") and active.get("config_entry_id") != entry.entry_id:
+        _LOGGER.error("Venta: existing YAML or another UI entry owns the HomeKit patch")
+        return False
+    values = dict(entry.data)
+    try:
+        selections = {
+            role: values.get(f"{role}_entity")
+            for role in ("fan", "led", "brightness", "temperature", "humidity")
+        }
+        confirmed = frozenset(values.get("confirmed_unclassified", []))
+        problems = validate_from_hass(
+            hass, values.get("humidifier_entity"), selections,
+            confirmed_unclassified=confirmed,
+        )
+    except (DiscoveryError, TypeError, ValueError):
+        _LOGGER.error("Venta: saved entity mapping is no longer valid")
+        _report_binding_issue(hass, entry)
+        return False
+    if problems:
+        _LOGGER.error("Venta: saved entity mapping changed; repair required")
+        _report_binding_issue(hass, entry)
+        return False
+    if active.get("patched"):
+        # HA can request setup again for the same config entry. Never add a
+        # second listener, registration or HomeKit accessory, and never accept
+        # changed mappings in place: those need guarded reload/migration.
+        if active.get("config_entry_data") == values:
+            _clear_binding_issue(hass, entry)
+            return True
+        _LOGGER.error("Venta: saved UI mapping differs from the active binding")
+        return False
+    ok = await async_setup(hass, {DOMAIN: values})
+    if ok and hass.data.get(DOMAIN, {}).get("patched"):
+        hass.data[DOMAIN]["config_entry_id"] = entry.entry_id
+        hass.data[DOMAIN]["config_entry_data"] = values.copy()
+        _clear_binding_issue(hass, entry)
+    elif not ok:
+        _report_binding_issue(hass, entry)
+    return ok
+
+
+async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
+    """Fail closed until HomeKit lifecycle-safe unload is implemented.
+
+    Returning False requires a restart instead of leaving an existing HAP
+    accessory bound to a different controller or accidentally re-pairing it.
+    V120-04 will implement guarded unload/reconfigure with identity tests.
+    """
+    return not hass.data.get(DOMAIN, {}).get("patched")

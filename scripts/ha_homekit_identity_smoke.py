@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from copy import deepcopy
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -44,7 +45,54 @@ def _hap_ids(accessory):
     return tuple(sorted(identities))
 
 
-def validate(config_dir: Path, expected_ha_version: str) -> dict:
+def _identity_fingerprint(first: dict) -> str:
+    """Digest of synthetic AID/IID and service structure, no pairing values."""
+    payload = {
+        key: first[key]
+        for key in ("venta_aid", "other_aid", "venta_shape", "other_shape")
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _read_synthetic_state(path: Path) -> dict:
+    """Only read a bounded, non-symlinked synthetic identity fixture."""
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 262144:
+        raise ValueError("invalid_synthetic_identity_state")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(data, dict)
+        or data.get("schema") != "venta-synthetic-identity/v1"
+        or not isinstance(data.get("fingerprint"), str)
+        or len(data["fingerprint"]) != 64
+        or not isinstance(data.get("allocations"), dict)
+        or set(data["allocations"]) != {"aids", "iids"}
+        or not isinstance(data["allocations"]["aids"], dict)
+        or not isinstance(data["allocations"]["iids"], dict)
+    ):
+        raise ValueError("invalid_synthetic_identity_state")
+    return data
+
+
+def validate(
+    config_dir: Path, expected_ha_version: str, *,
+    state_file: Path | None = None, state_mode: str | None = None,
+) -> dict:
+    if (state_file is None) != (state_mode is None):
+        raise ValueError("identity_state_requires_mode_and_path")
+    if state_mode not in (None, "capture", "verify"):
+        raise ValueError("invalid_identity_state_mode")
+    if state_file is not None and (
+        ".storage" in state_file.parts
+        or state_file.resolve().is_relative_to(config_dir.resolve())
+    ):
+        # No code path can write into a real HA configuration or pairing store.
+        raise ValueError("identity_state_must_be_outside_ha_config")
+    saved_state = (
+        _read_synthetic_state(state_file)
+        if state_mode == "verify" and state_file is not None else None
+    )
     sys.path.insert(0, str(config_dir))
     from homeassistant.const import __version__ as ha_version
     from homeassistant.core import State
@@ -162,7 +210,13 @@ def validate(config_dir: Path, expected_ha_version: str) -> dict:
     TYPES["HumidifierDehumidifier"] = venta._venta_accessory_factory
     try:
         async def run():
-            first = await build()
+            first = await build(
+                saved_state["allocations"] if saved_state is not None else None
+            )
+            if saved_state is not None:
+                assert _identity_fingerprint(first) == saved_state["fingerprint"], (
+                    "cross-process HomeKit AID/IID identity drift"
+                )
             # Simulated accessory reload, with the same persisted AID/IID data.
             second = await build(first["allocations"])
             # Simulated Home Assistant restart/update, retaining store data.
@@ -176,8 +230,27 @@ def validate(config_dir: Path, expected_ha_version: str) -> dict:
         TYPES["HumidifierDehumidifier"] = saved
 
     assert TYPES.get("HumidifierDehumidifier") is Native
+
+    if state_mode == "capture" and state_file is not None:
+        # CI runner volume only. Never write to Home Assistant's .storage
+        # or read a real pairing file; this is synthetic HAP allocation data.
+        state = {
+            "schema": "venta-synthetic-identity/v1",
+            "allocations": first["allocations"],
+            "fingerprint": _identity_fingerprint(first),
+        }
+        raw = json.dumps(state, sort_keys=True, separators=(",", ":"))
+        if len(raw) > 262144:
+            raise ValueError("synthetic_identity_state_oversized")
+        if state_file.is_symlink() or state_file.exists():
+            raise FileExistsError("synthetic_identity_state_must_be_new")
+        with state_file.open("x", encoding="utf-8") as output:
+            output.write(raw + "\n")
+
     return {
         "status": "PASS",
+        "cross_process_mode": state_mode or "none",
+        "cross_process_identity_stable": state_mode == "verify",
         "ha_version": ha_version,
         "native_other_humidifier": True,
         "reload_and_restart_aid_iid_stable": True,
@@ -191,8 +264,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--ha-version", default="2026.11.1")
+    parser.add_argument("--state-file", type=Path)
+    parser.add_argument("--state-mode", choices=("capture", "verify"))
     args = parser.parse_args()
-    print(json.dumps(validate(args.config, args.ha_version), sort_keys=True))
+    print(json.dumps(validate(
+        args.config, args.ha_version,
+        state_file=args.state_file, state_mode=args.state_mode,
+    ), sort_keys=True))
 
 
 if __name__ == "__main__":

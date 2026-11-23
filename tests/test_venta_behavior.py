@@ -430,7 +430,7 @@ class VentaDiagnosticsRegistrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result, response)
             self.assertEqual(result["humidifier"], "off")
             self.assertEqual(result["homekit_bridge"], "ready")
-            self.assertEqual(result["integration_version"], "1.0.4")
+            self.assertEqual(result["integration_version"], "1.2.0")
             self.assertEqual(result["localtuya"], "loaded")
             serialized = json.dumps(result)
             for secret in (

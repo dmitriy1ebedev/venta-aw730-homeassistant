@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 (2026-11-23)
+- Introduce guarded Home Assistant config_flow, device-bound entity registry discovery and staged YAML→UI migration with preserved existing HomeKit bridge identity.
+- Add non-applying Options review, explicit backup/restart-bound Reconfigure and fail-closed Repairs for missing original bindings.
+- Preserve existing seven-key YAML installations without automatic migration, re-pairing or HomeKit bridge reload.
+- Validate HomeKit/PyHAP identity in HA 2026.11.1/2026.11.2, six independent real HA cold starts, YAML rollback and private backup restoration.
+- Keep sensitive HA snapshots, HomeKit pairing material and LocalTuya keys on the owner's host; never distribute them in CI or release packages.
+
 ## Unreleased
 - Prepare a read-only, device-scoped entity-registry discovery helper for the future Venta 1.2.0 config flow. Require explicit user confirmation; never bind fan/LED from a different LocalTuya device or automatically migrate existing YAML/Apple Home.
 - Route only the configured Venta entity to the enhanced HomeKit class; all other humidifiers retain the native HA class. Fail closed on missing HomeKit/PyHAP API contracts. Add isolated HomeKit AID/IID stability regressions (no pairing or live device).

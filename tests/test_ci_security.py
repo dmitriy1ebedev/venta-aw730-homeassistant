@@ -36,6 +36,7 @@ class CISecurityTests(unittest.TestCase):
         scripts = "\n".join(step.get("run", "") for step in jobs["tests"]["steps"])
         for required in (
             "compileall", "unittest discover", "scripts/check_repository.py",
+            "scripts/check_publication_security.py",
             "venta-airwasher-card.js", "venta-more-info.js",
         ):
             self.assertIn(required, scripts)
