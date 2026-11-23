@@ -39,6 +39,8 @@ def validate() -> list[str]:
         "scripts/ha_config_entry_setup_smoke.py",
         "docs/ENTITY_DISCOVERY.md",
         "scripts/build_release.py",
+        "scripts/check_publication_security.py",
+        "tests/test_publication_security.py",
         "scripts/stage_ha_runtime.py",
         "scripts/ha_native_homekit_smoke.py",
         "scripts/ha_homekit_identity_smoke.py",
