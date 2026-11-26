@@ -5,6 +5,8 @@ Venta AW730 --(Tuya LAN 3.4 / LocalTuya)--> Home Assistant humidifier
 
 Optional: HA humidifier -> Yaha Cloud -> Yandex Smart Home / Alice
 
+See [cross-platform command and acceptance contract](PLATFORM_ACCEPTANCE.md) for the 1.3.0 candidate and separately required physical readback.
+
 Marketplace manages `custom_components/venta_homekit_native/`, not LocalTuya's files.
 This integration bundles `templates/venta_aw730.yaml` and calls
 `sync_managed_template` once during its Home Assistant setup. The synchronization

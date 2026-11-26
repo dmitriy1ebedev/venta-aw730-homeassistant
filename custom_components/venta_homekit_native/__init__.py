@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 from pathlib import Path
 
 from homeassistant.const import __version__ as HA_VERSION
@@ -61,6 +62,24 @@ CONFIG_SCHEMA = vol.Schema(
     },
     extra=vol.ALLOW_EXTRA,
 )
+
+
+def _homekit_number(value, minimum: float, maximum: float) -> float | None:
+    """Validate a HomeKit number before issuing any physical command."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) and minimum <= number <= maximum else None
+
+
+def _homekit_binary(value) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    number = _homekit_number(value, 0, 1)
+    return int(number) if number in (0, 1) else None
 
 
 class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
@@ -177,9 +196,9 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
     @callback
     def _set_chars(self, values: dict):
         if self.entity_id == ENTITY and "TargetHumidifierDehumidifierState" in values:
-            choice = int(values["TargetHumidifierDehumidifierState"])
-            if choice not in (0, 1):
-                _LOGGER.warning("Venta: invalid humidifier target choice %s", choice)
+            choice = _homekit_binary(values["TargetHumidifierDehumidifierState"])
+            if choice is None:
+                _LOGGER.warning("Venta: invalid humidifier target choice")
                 return
             self.hass.async_create_task(self._venta_apply_target(choice))
             self.char_target_humidifier_dehumidifier.set_value(choice)
@@ -189,8 +208,11 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
             super()._set_chars(values)
 
     async def _venta_apply_target(self, choice: int):
+        choice = _homekit_binary(choice)
+        if choice is None:
+            return
         state = self.hass.states.get(ENTITY)
-        if state is None or state.state in ("unknown", "unavailable"):
+        if state is None or state.state not in (STATE_ON, STATE_OFF):
             _LOGGER.warning("Venta target ignored: underlying device unavailable")
             return
         # LocalTuya Venta ignores mode commands while switched off.
@@ -208,9 +230,9 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
     def _venta_set_auto(self, values: dict):
         if "On" not in values:
             return
-        self.hass.async_create_task(
-            self._venta_apply_auto_toggle(bool(values["On"]))
-        )
+        enable = _homekit_binary(values["On"])
+        if enable is not None:
+            self.hass.async_create_task(self._venta_apply_auto_toggle(bool(enable)))
 
     async def _venta_apply_auto_toggle(self, enable: bool):
         """Auto switch belongs to existing Venta accessory, never a new device."""
@@ -237,18 +259,23 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
 
     async def _venta_apply_fan(self, values: dict):
         # Execute in order: the real device can ignore mode/speed while off.
-        speed = float(values["RotationSpeed"]) if "RotationSpeed" in values else None
-        if ("Active" in values and not int(values["Active"])) or (
-            speed is not None and speed <= 0
-        ):
+        # Check all supplied characteristics before the first service call.
+        speed = _homekit_number(values["RotationSpeed"], 0, 100) if "RotationSpeed" in values else None
+        active = _homekit_binary(values["Active"]) if "Active" in values else None
+        target = _homekit_binary(values["TargetFanState"]) if "TargetFanState" in values else None
+        if any(key in values and value is None for key, value in (
+            ("RotationSpeed", speed), ("Active", active), ("TargetFanState", target),
+        )) or not any(key in values for key in ("RotationSpeed", "Active", "TargetFanState")):
+            _LOGGER.warning("Venta: invalid fan command")
+            return
+        state = self.hass.states.get(ENTITY)
+        if state is None or state.state not in (STATE_ON, STATE_OFF):
+            _LOGGER.warning("Venta fan command skipped: humidifier unavailable")
+            return
+        if active == 0 or (speed is not None and speed == 0):
             await self.hass.services.async_call(
                 "humidifier", "turn_off", {ATTR_ENTITY_ID: ENTITY}, blocking=True,
             )
-            return
-
-        state = self.hass.states.get(ENTITY)
-        if state is None or state.state in ("unknown", "unavailable"):
-            _LOGGER.warning("Venta fan command skipped: humidifier unavailable")
             return
 
         if state.state == STATE_OFF:
@@ -257,8 +284,8 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
             )
 
         mode = None
-        if "TargetFanState" in values:
-            mode = "Auto" if int(values["TargetFanState"]) else "Manual"
+        if target is not None:
+            mode = "Auto" if target else "Manual"
         elif speed is not None:
             # A manual speed adjustment must leave automatic fan control.
             mode = "Manual"
@@ -267,7 +294,9 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
                 "humidifier", "set_mode",
                 {ATTR_ENTITY_ID: ENTITY, "mode": mode}, blocking=True,
             )
-        if speed is not None and speed > 0:
+        # Explicit Auto wins over a stale positive slider value in the same
+        # HAP write; do not dispatch contradictory manual speed alongside it.
+        if speed is not None and speed > 0 and target != 1:
             level = str(max(1, min(AW730.fan_levels, round(speed / AW730.fan_step_percent))))
             await self.hass.services.async_call(
                 "select", "select_option",
@@ -276,14 +305,18 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
 
     @callback
     def _venta_set_led(self, values: dict):
-        if "On" in values:
+        on = _homekit_binary(values["On"]) if "On" in values else None
+        brightness = _homekit_number(values["Brightness"], 0, 100) if "Brightness" in values else None
+        if ("On" in values and on is None) or ("Brightness" in values and brightness is None):
+            _LOGGER.warning("Venta: invalid LED command")
+            return
+        if on is not None:
             self.async_call_service(
                 "switch",
-                "turn_on" if bool(values["On"]) else "turn_off",
+                "turn_on" if on else "turn_off",
                 {ATTR_ENTITY_ID: LED}, "LED power",
             )
-        if "Brightness" in values:
-            brightness = float(values["Brightness"])
+        if brightness is not None:
             level = str(max(1, min(AW730.brightness_levels, round(brightness * AW730.brightness_levels / 100))))
             self.async_call_service(
                 "select", "select_option",
