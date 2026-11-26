@@ -22,7 +22,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-HA_PORT = 28996
+HA_PORT = 8123
 ENTITY = "humidifier.venta_aw730"
 SENSORS = {
     "sensor.venta_aw730_humidity": ("44", "46", "%"),
@@ -149,7 +149,10 @@ def serve(bridge: Path, source: Path):
                 "name": "Venta CI", "latitude": 0, "longitude": 0,
                 "elevation": 0, "unit_system": "metric", "time_zone": "UTC",
             },
-            "http": {"server_host": "127.0.0.1", "server_port": HA_PORT},
+            # HA 2026.11 migrates nondefault YAML HTTP settings into a
+            # pending trial requiring confirmation. Use defaults instead;
+            # the entire container has --network none, and the relay only
+            # connects to its loopback. Never suppress the HA dialog.
             "frontend": {}, "api": {}, "recorder": {"commit_interval": 1},
             "history": {}, "venta_ci_dashboard": {},
             "lovelace": {
@@ -296,6 +299,7 @@ def browser_test(base, chrome):
                         raise AssertionError("Lovelace card overflows viewport")
                     power = card.locator('[data-action="power"]')
                     expect(power).to_be_enabled(timeout=15000)
+                    expect(page.locator("dialog-http-pending-config")).not_to_be_visible(timeout=15000)
                     expect(power).to_have_attribute("aria-label", "Питание")
                     if power.bounding_box()["height"] < 44:
                         raise AssertionError("power target too small")
