@@ -1,0 +1,28 @@
+# Add as a manual Lovelace card (not configuration.yaml).
+# Replace EVERY example entity ID with your own matching Venta entities.
+# Remove optional PM2.5/water roles and their graph entries if they do not exist.
+type: vertical-stack
+cards:
+  - type: custom:venta-airwasher-card
+    entity: humidifier.venta_aw730
+    humidity: sensor.venta_aw730_humidity
+    temperature: sensor.venta_aw730_temperature
+    fan: select.venta_aw730_fan_speed
+    led: switch.venta_aw730_led_on
+    led_color: select.venta_aw730_led_color
+    led_brightness: select.venta_aw730_led_brightness
+    pm25: sensor.venta_aw730_pm25
+    water_level: sensor.venta_aw730_water_level
+  - type: history-graph
+    title: Venta — air quality (24 h)
+    hours_to_show: 24
+    entities:
+      - sensor.venta_aw730_humidity
+      - sensor.venta_aw730_temperature
+      - sensor.venta_aw730_pm25
+  - type: history-graph
+    title: Venta — operation (24 h)
+    hours_to_show: 24
+    entities:
+      - select.venta_aw730_fan_speed
+      - sensor.venta_aw730_water_level

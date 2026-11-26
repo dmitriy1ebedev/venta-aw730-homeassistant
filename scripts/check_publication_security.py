@@ -32,7 +32,7 @@ CONTENT_SIGNATURES = (
 )
 TEXT_SUFFIXES = {
     ".md", ".txt", ".py", ".js", ".ts", ".json", ".yaml", ".yml",
-    ".toml", ".sh", ".xml", ".svg", ".ini", ".cfg",
+    ".toml", ".sh", ".xml", ".svg", ".ini", ".cfg", ".html",
 }
 
 
