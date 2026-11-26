@@ -196,6 +196,27 @@ jobs:
             ghcr.io/home-assistant/home-assistant:2026.11.1 \
             python /tmp/venta-boot-smoke.py --config /source --ha-version 2026.11.1 --boot-timeout 95
 
+      - name: Set up Python for the real Lovelace browser gate
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Exercise real Lovelace and local recorder in isolated HA
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check playwright==1.56.0
+          bridge="$RUNNER_TEMP/venta-ha-dashboard-bridge"
+          mkdir -m 700 "$bridge"
+          name=venta-ci-dashboard-${GITHUB_RUN_ID}
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$name" --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 --user "$(id -u):$(id -g)" \
+            -v "$bridge:/bridge" \
+            -v "$GITHUB_WORKSPACE/scripts/ha_dashboard_frontend_smoke.py:/tmp/venta-dashboard-smoke.py:ro" \
+            -v "$GITHUB_WORKSPACE/extras/dashboard:/source:ro" \
+            ghcr.io/home-assistant/home-assistant:2026.11.1 \
+            python /tmp/venta-dashboard-smoke.py serve --bridge /bridge --source /source
+          timeout 300s python scripts/ha_dashboard_frontend_smoke.py client --bridge "$bridge" --chrome "$(command -v google-chrome)"
+
   ha_patch_smoke:
     name: Disposable Home Assistant 2026.11.2 configuration smoke
     # P02.5 candidate: current HA 2026.11.2, isolated from production and from the baseline job.

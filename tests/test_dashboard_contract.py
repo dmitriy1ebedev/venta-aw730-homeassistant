@@ -30,5 +30,15 @@ class DashboardContractTests(unittest.TestCase):
         self.assertIn('data-result="PASS"', browser["run"])
         self.assertIn("google-chrome", browser["run"])
 
+    def test_real_ha_frontend_gate_keeps_fixture_isolated(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/validate.yml").read_text())
+        step = next(s for s in workflow["jobs"]["ha_runtime_smoke"]["steps"] if s.get("name") == "Exercise real Lovelace and local recorder in isolated HA")
+        self.assertNotIn("continue-on-error", step)
+        for guard in ("--network none", "--cap-drop ALL", "--security-opt no-new-privileges", "--pids-limit", "/source:ro", "ha_dashboard_frontend_smoke.py client", "docker rm -f"):
+            self.assertIn(guard, step["run"])
+        fixture = (ROOT / "scripts/ha_dashboard_frontend_smoke.py").read_text()
+        for check in ("ThreadingUnixStreamServer", "127.0.0.1", "REAL_LOVELACE_BROWSER_PASS", "state-history-charts", "isLoadingData", "has_touch=mobile", "route_web_socket", "real local recorder fan state timeline"):
+            self.assertIn(check, fixture)
+
 if __name__ == "__main__":
     unittest.main()
