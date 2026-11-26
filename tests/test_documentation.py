@@ -82,6 +82,23 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("redacted", ids["actual"]["attributes"]["label"].lower())
         self.assertIn("IP/MAC", ids["safety"]["attributes"]["options"][0]["label"])
 
+    def test_public_catalog_and_support_claims(self):
+        matrix = (ROOT / "docs/MARKETPLACE.md").read_text()
+        self.assertIn("NOT SUBMITTED", matrix)
+        self.assertIn("ignore: topics", matrix)
+        self.assertIn("HomeKit", matrix)
+        self.assertIn("45760621426", (ROOT / "docs/compatibility.md").read_text())
+        for name in ("README.md", "README.ru.md"):
+            doc = (ROOT / name).read_text()
+            for link in ("docs/MARKETPLACE.md", "docs/YAML_MIGRATION.md", "extras/dashboard/README.md", ".github/ISSUE_TEMPLATE/bug_report.yml"):
+                self.assertIn(link, doc)
+            self.assertIn("2026.12.0b0", doc)
+        import yaml
+        form = yaml.safe_load((ROOT / ".github/ISSUE_TEMPLATE/bug_report.yml").read_text())
+        diagnostic = next(field for field in form["body"] if field.get("id") == "diagnostic_report")
+        self.assertFalse(diagnostic["validations"]["required"])
+        self.assertIn("log_diagnostics", diagnostic["attributes"]["description"])
+
     def test_ui_localizations_cover_every_wizard_and_repair_label(self):
         """Both built-in locales must cover every actual Home Assistant UI key."""
         component = ROOT / "custom_components/venta_homekit_native"

@@ -1,8 +1,6 @@
 # Venta 1.2.0 — Options, Reconfigure and Repairs (V120-04)
 
-**Source-only candidate; not installed, released or accepted.** The existing
-Venta AW730/HomeKit bridge and Apple Home pairing are never modified by
-these repository changes. A future live canary requires owner approval.
+**Released in 1.2.0; the operational canary retained its existing YAML.** The UI workflows were exercised in isolation. A live transition or change of existing HomeKit pairing is not established by those tests; see [release evidence](RELEASE_1_2_0.md).
 
 ## Options: inspect and stage only
 
@@ -68,7 +66,4 @@ Home Assistant's `.storage`, delete pairing state or reset the device.
 Bridge migrations require a separate identity-preserving canary and are
 **not enabled** by this feature.
 
-Outstanding: HA 2026.11.x disposable end-to-end restart, restore test,
-paired HAP AID/IID comparison on genuine runtime, accessibility/UI check,
-MCPshka sealed phase gate (MCP-267), and owner-approved live canary.
-Only after that may V120-04 be accepted in ROADMAP.
+The ROADMAP records V120-04 as accepted on 2026-11-23 using isolated real-HA APIs and regression tests. The actual production UI cutover and bridge migration remain separate, explicitly approved operations.

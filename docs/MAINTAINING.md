@@ -39,4 +39,4 @@ For a manual install before Venta setup, run `install_localtuya_template.py`. A 
 
 ## Marketplace catalog
 
-Installing a custom repository is separate from being accepted into the default catalog. The project currently extends internal HomeKit behavior, which may restrict default catalog eligibility. See [Home Assistant contributor guidance](https://contributors.home-assistant.io/marketplace/guides/integrations/).
+Installing a custom repository is separate from acceptance into the default catalog. See [catalog status and submission decision](MARKETPLACE.md). Current HACS action uses a documented topics exception; the scoped internal HomeKit registry patch also needs an eligibility review before a catalog application. Never claim inclusion based on CI alone.

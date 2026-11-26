@@ -1,15 +1,10 @@
 # Venta 1.2.0 — safe entity association (V120-02 preview)
 
-**Development branch only; not installed or accepted for release.** The
-P03.1 config flow now combines this read-only discovery with explicit bridge
-and role selection. The existing seven-key YAML installation, HomeKit pairing,
-and LocalTuya configuration remain unchanged. The installed 1.0.4 and the
-separate 1.0.5 maintenance release do not include this candidate. It must pass
-disposable Home Assistant runtime acceptance before any real installation.
+**Released in Venta 1.2.0.** The config flow combines read-only discovery with explicit bridge and role selection. The historical canary retained the seven-key YAML installation and the original bridge; production UI cutover remains untested. See [release evidence](RELEASE_1_2_0.md).
 
 ## Trust boundary
 
-The future UI chooses an existing LocalTuya humidifier and obtains its
+The UI chooses an existing LocalTuya humidifier and obtains its
 Home Assistant entity registry entry. Related entities are offered only if
 all of these properties match the humidifier:
 
@@ -71,9 +66,7 @@ guessing entities, restarting HA or resetting HomeKit. See
 [Options and Repairs](OPTIONS_AND_REPAIRS.md). New issues contain only a
 fixed reason and a config-entry reference, never physical device credentials.
 
-**Still pending:** V120-03 disposable restart/rollback acceptance, V120-04
-end-to-end restart/repair acceptance, safe live unload, and an owner-approved
-production canary (P03.5). A green synthetic smoke does not authorize rollout.
+**Acceptance scope:** V120-03 and V120-04 isolated regressions and the 1.2.0 operational canary are recorded in ROADMAP. Safe live UI cutover and live unload still require separate verification. A green synthetic smoke does not authorize rollout.
 No saved device IDs, LocalTuya local keys or pairing data should be placed in
 test fixtures, logs or GitHub issues.
 

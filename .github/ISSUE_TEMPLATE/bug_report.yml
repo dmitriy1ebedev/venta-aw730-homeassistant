@@ -6,11 +6,12 @@ body:
     attributes:
       value: |
         Please remove credentials, pairing data, serial numbers, IP addresses and account details from logs and screenshots.
+        Удалите ключи, токены, данные сопряжения, серийные номера, адреса и данные аккаунта из логов и снимков экрана.
   - type: input
     id: ha_version
     attributes:
       label: Home Assistant version
-      placeholder: "2026.11.0"
+      placeholder: "2026.11.3"
     validations:
       required: true
   - type: input
@@ -23,7 +24,7 @@ body:
     id: venta_version
     attributes:
       label: Venta extension version
-      placeholder: "1.0.4"
+      placeholder: "1.2.0"
     validations:
       required: true
   - type: dropdown
@@ -33,6 +34,7 @@ body:
       description: Only AW730 Tuya 3.4 is currently verified; other models need evidence.
       options:
         - AW730 (Smart Life / Tuya)
+        - AW735 (unverified)
         - Other Venta model (unverified)
     validations:
       required: true
@@ -88,6 +90,13 @@ body:
       label: Actual behavior (redacted logs only)
     validations:
       required: true
+  - type: textarea
+    id: diagnostic_report
+    attributes:
+      label: Optional redacted diagnostic JSON / Необязательный обезличенный отчёт
+      description: Use Developer Tools → Actions → venta_homekit_native.log_diagnostics if available; do not attach a backup or raw registry. / Не прикладывайте резервные копии и реестры.
+    validations:
+      required: false
   - type: checkboxes
     id: safety
     attributes:

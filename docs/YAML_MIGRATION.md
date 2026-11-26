@@ -1,6 +1,6 @@
 # Venta 1.2.0 — migration from seven-key YAML (V120-03)
 
-**Experimental, not released or installed.** This is an interactive,
+**Published in 1.2.0; the operational canary retained YAML.** This is an interactive,
 two-start transition. The integration must continue to use the **same**
 LocalTuya humidifier entity, the **same** HomeKit bridge entry ID and the
 same five associated entities. Do not reset Apple Home pairing, create another
@@ -54,10 +54,6 @@ all operations are inert until the installation and restart gates.
 The disposable smoke tests use synthetic LocalTuya registries and never
 send physical commands.
 
-## Acceptance not yet satisfied
+## Acceptance scope
 
-V120-03 needs idempotent migration tested with a genuine disposable Home
-Assistant restart, AID/IID consistency, a **restored** synthetic HA snapshot,
-and an approved production canary with verified rollback readiness.
-Green Python tests and isolated ConfigFlow smoke are necessary but not
-sufficient. V120-01 and MCP-267 remain separate blockers.
+The ROADMAP records the V120-03 isolated migration and rollback gates as accepted on 2026-11-23. [Release evidence](RELEASE_1_2_0.md) distinguishes the published 1.2.0 and the operational canary from a live UI cutover, which has not been performed. Green isolated CI does not authorize a production migration.

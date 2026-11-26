@@ -25,7 +25,7 @@ Power, target humidity 30–70%, Auto / Manual / Sleep, five fan speeds, LED con
 
 **1. Install [LocalTuya](https://github.com/xZetsubou/hass-localtuya).** The connection uses Tuya LAN protocol 3.4 and your own Smart Life / Tuya device credentials.
 
-**2. Install Venta AW730 from Marketplace.**
+**2. Install Venta AW730 as a custom Marketplace repository.** In HA 2026.11+, open Settings → Marketplace → Add from link and enter `dmitriy1ebedev/venta-aw730-homeassistant` (type Integration if prompted). A GitHub connection is required for custom repositories. This is not a default catalog listing; see [catalog status](docs/MARKETPLACE.md). Select the published release, not an unreleased source branch.
 
 <!-- ha-marketplace:exclude-start -->
 [![Add to Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=dmitriy1ebedev&repository=venta-aw730-homeassistant&category=integration)
@@ -37,13 +37,17 @@ If you are adding the device **before** configuring the Venta HomeKit extension,
 
 **Updates:** after updating Venta through Marketplace and restarting Home Assistant, an unmodified managed LocalTuya template is synchronized automatically with a backup of the prior version. Customized templates are never overwritten. LocalTuya stores already configured device entities separately, so changes to their mappings must be reviewed; the update does not silently rewrite device credentials or entity IDs. HomeKit and Alice export the **same existing humidifier entity**, without a second Venta device.
 
-**Apple Home:** configure an existing [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/), add the [configuration example](examples/configuration.yaml.example) to `configuration.yaml` with your entity IDs, validate and restart HA. Do not recreate your working Venta accessory or pairing.
+**Apple Home:** configure an existing [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/). For a new Venta 1.2.0 setup, open Settings → Devices & services → Add integration → Venta AW730; select the existing LocalTuya humidifier, bridge and five associated entities. Alternatively use the [YAML example](examples/configuration.yaml.example), validate and restart HA. Choose only one configuration method. For an existing YAML installation, keep it unless you deliberately follow the [backup and migration procedure](docs/YAML_MIGRATION.md). Do not recreate your working Venta accessory or pairing.
 
 **Alice:** expose the same humidifier entity with [Yaha Cloud](https://docs.yaha-cloud.ru/) ([source](https://github.com/dext0r/yandex_smart_home)).
 
 ## Compatibility
 
-Verified on one Venta AW730 Smart Life/Tuya 3.4 installation with LocalTuya 2026.10.0 and Home Assistant 2026.11.1. Other models and HA versions are not yet verified. See the [compatibility and troubleshooting matrix](docs/compatibility.md). The extension depends on internal HomeKit APIs and may need updates after major HA releases.
+Verified on one Venta AW730 Smart Life/Tuya 3.4 installation with LocalTuya 2026.10.0 and Home Assistant 2026.11.1. HA 2026.11.2, 2026.11.3 and 2026.12.0b0 have passed isolated CI only; other models and untested versions are not verified. See the [compatibility and troubleshooting matrix](docs/compatibility.md). The extension depends on internal HomeKit APIs and may need updates after major HA releases.
+
+## Optional dashboard and support
+
+The [standalone dashboard](extras/dashboard/README.md) is a development asset installed manually, not part of the released integration package. For errors, use the [read-only diagnostic guide](docs/DIAGNOSTICS.md) and [bug report form](.github/ISSUE_TEMPLATE/bug_report.yml). Do not send credentials or pairing files, and do not reset the device to diagnose an issue.
 
 ## License
 

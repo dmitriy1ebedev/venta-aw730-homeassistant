@@ -96,6 +96,12 @@ class DiagnosticsContractTests(unittest.TestCase):
         self.assertEqual(set(report["linked_entities"]), {"fan", "led", "brightness", "temperature", "humidity"})
         self.assert_redacted(report)
 
+    def test_documented_example_matches_actual_diagnostic_schema(self):
+        document = (ROOT / "docs/DIAGNOSTICS.md").read_text()
+        example = json.loads(document.split("```json\n", 1)[1].split("\n```", 1)[0])
+        self.assertEqual(example, self.collect())
+        self.assert_redacted(example)
+
     def test_localtuya_not_configured_is_not_mislabeled_not_installed(self):
         self.hass.config_entries.localtuya = []
         report = self.collect()
