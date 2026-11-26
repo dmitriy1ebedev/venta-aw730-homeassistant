@@ -43,6 +43,10 @@ across simulated reload/restart cycles. This does **not** test existing Apple
 Home pairings or a real running HomeKit server. No user pairings or `.storage`
 files may be deleted or rewritten as part of an upgrade test.
 
+## Model contracts (1.3.0 candidate)
+
+The immutable [AW730 model profile](MODEL_PROFILES.md) records the original DP mapping and fan/LED conversions, verified against the unchanged bundled YAML by repository CI. It does not detect hardware or change existing bindings; no other model is enabled.
+
 ## UI configuration (released in 1.2.0)
 
 The [entity-discovery plan](ENTITY_DISCOVERY.md) restricts helper choices to the same LocalTuya device and config entry. The UI wizard requires explicit confirmation of each role; Options stages changes and Reconfigure applies only reviewed same-bridge mappings for the next restart. The YAML path remains supported. See [release evidence](RELEASE_1_2_0.md) and [Options and Repairs](OPTIONS_AND_REPAIRS.md). The historical canary retained YAML; actual UI cutover was not performed.
