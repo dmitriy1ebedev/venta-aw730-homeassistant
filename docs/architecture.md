@@ -43,10 +43,6 @@ across simulated reload/restart cycles. This does **not** test existing Apple
 Home pairings or a real running HomeKit server. No user pairings or `.storage`
 files may be deleted or rewritten as part of an upgrade test.
 
-## Future UI preparation (not installed)
+## UI configuration (released in 1.2.0)
 
-The experimental [entity-discovery plan](ENTITY_DISCOVERY.md) restricts helper
-entity choices to the exact LocalTuya device and config entry, excludes disabled
-and hidden registry entities, and requires explicit confirmation of every role.
-It is a read-only pure planning module; the existing YAML integration does not
-yet consume it, nor does it write config entries or change pairings.
+The [entity-discovery plan](ENTITY_DISCOVERY.md) restricts helper choices to the same LocalTuya device and config entry. The UI wizard requires explicit confirmation of each role; Options stages changes and Reconfigure applies only reviewed same-bridge mappings for the next restart. The YAML path remains supported. See [release evidence](RELEASE_1_2_0.md) and [Options and Repairs](OPTIONS_AND_REPAIRS.md). The historical canary retained YAML; actual UI cutover was not performed.

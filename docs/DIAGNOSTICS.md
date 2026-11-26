@@ -1,6 +1,6 @@
 # Venta AW730 — privacy-safe diagnostics
 
-This is documentation for the **next source release**: the installed H96 baseline is still **1.0.4**, which does not yet offer this new service. Do not restart or upgrade a live Home Assistant instance to test unreleased code.
+The diagnostic service is included in published Venta 1.2.0. The older 1.0.4 rollback baseline does not provide it. See [release evidence](RELEASE_1_2_0.md). If the service is absent, verify the installed version rather than restarting, upgrading or resetting devices solely for diagnosis.
 
 ## How to collect a diagnostic report after an approved release
 
@@ -25,6 +25,33 @@ The output is a single JSON object with a **fixed schema**:
 - `protocol_error`: currently always `not_available_from_entity_state`; the service **cannot** infer Tuya handshake failures from entity states alone
 
 **No device identifiers, entity IDs, IP/MAC, token, local_key, pairing information, raw attributes or sensor measurements are included.** Diagnostics are generated locally and written to the HA log only when the service is called; no external telemetry.
+
+## Synthetic example (not a report from a real installation)
+
+```json
+{
+  "schema": 1,
+  "integration_version": "1.2.0",
+  "home_assistant_version": "2026.11.1",
+  "localtuya_version": "2026.10.0",
+  "configuration": "complete",
+  "localtuya": "loaded",
+  "humidifier": "off",
+  "linked_entities": {
+    "fan": "available", "led": "available", "brightness": "available",
+    "temperature": "available", "humidity": "available"
+  },
+  "homekit_bridge": "ready",
+  "recommendation": "none",
+  "protocol_error": "not_available_from_entity_state"
+}
+```
+
+This fixture is compared with the actual diagnostic function by CI. A beta version string can appear as `unknown` because the sanitizer accepts numeric versions only; include the HA version separately in the issue form.
+
+## По-русски
+
+В HA откройте «Инструменты разработчика → Действия», выберите `venta_homekit_native.log_diagnostics` и выполните один раз. Скопируйте JSON-ответ после проверки на отсутствие личных данных. При недоступности соберите отчёт во время ошибки и после восстановления; сравните категории. Не вызывайте reset, не удаляйте мост и не меняйте параметры LocalTuya для получения отчёта. Укажите версии и краткие обезличенные шаги в [форме ошибки](../.github/ISSUE_TEMPLATE/bug_report.yml). Диагностика не определяет причину ошибки протокола по одному статусу unavailable.
 
 ## Recommendations
 
