@@ -1,64 +1,103 @@
-# Venta AW730: Tuya LAN and MQTT transport decision notebook
+# Venta AW730: transport research and economic decision (V200-01)
 
-Status: V200-01, research-only draft, 2026-11-23. No real-device transport switch, new Tuya session, key retrieval, MQTT configuration change, or Home Assistant deployment has been performed.
+Reviewed 2026-11-26 against the pinned public sources below and the project's
+existing compatibility evidence. This is a transport study, not approval to
+connect to hardware, retrieve keys, change a broker, or migrate HA.
 
-## Confirmed baseline and limits
+## Evidence and comparison
 
-- The project compatibility record documents one AW730 operating through the tested LocalTuya fork with Tuya LAN 3.4. This is evidence for that installation, not support for other AW7xx models or firmware.
-- H96 read-only Docker status on 2026-11-23: Mosquitto running/healthy; Zigbee2MQTT running/healthy. Existing MQTT infrastructure can be reused in a future design, but its presence does not make AW730 a native MQTT device.
-- H96 Home Assistant reports healthy and its installed Venta component manifest is 1.2.0 (operational canary). The owner reports no observable loss of existing functionality. This is not a published immutable release or authorization to migrate the existing YAML or HomeKit pairing.
-- Real AW730 simultaneous-connection limit, local-key rotation behavior, retained DP update cadence, and production command-to-confirmation latency are NOT measured. Do not assume facts from other Tuya devices apply to this unit.
+The existing AW730 Smart Life variant has operated with LocalTuya 2026.10.0,
+Tuya LAN 3.4. Exact physical firmware, parallel connection limit, real command
+latency, reconnect failure rate, CPU/RAM and key-rotation behavior are not
+measured. The earlier project observations of healthy HA/Mosquitto/Zigbee2MQTT
+are operational observations, not transport benchmarks.
 
-## Alternatives (A/B/C/D)
+| Alternative | Protocol and license evidence | Integration / maintenance cost | Decision |
+|---|---|---|---|
+| Existing xZetsubou LocalTuya | pinned 2026.10.0 const.py lists 3.1–3.5; GPL-3.0 repository | Already retains HA entity IDs, template, HomeKit bridge and Alice path; ongoing HA compatibility testing | Retain |
+| make-all/tuya-local | MIT repository, README lists 3.1–3.5 and device variants | Different profile/config integration; no verified drop-in AW730 identity migration | Do not replace solely for a different implementation |
+| Own Go client using cB-Sigma/tuyalan v0.3.0 | Apache-2.0; Go 1.22, upstream claims 3.4/3.5 authenticated sessions and independent frame tests | New protocol/session/reconnect maintenance, key custody, HA adapter and release/rollback work | Simulation only; no dependency adopted |
+| Own Go client with tiny-go | Cached pkg.go.dev listing exists; upstream repository returned 404 on review | Source/license maintenance cannot be independently confirmed now | Exclude from candidate dependency selection |
+| Optional MQTT fanout | HA MQTT documentation supports state, availability and discovery | Extra ACLs, broker and stale/retained message risks; no second writer | Only if an actual additional subscriber needs it |
 
-| Option | Device writer | Transport path | Main benefit | Main costs/risks | Initial decision |
-| --- | --- | --- | --- | --- | --- |
-| A: keep LocalTuya, no new MQTT path | Existing LocalTuya only | AW730 -> LocalTuya -> HA -> HomeKit/Alice | No extra process or compatibility migration | Existing LocalTuya dependency remains | Baseline, preferred until a defect or measured performance bottleneck |
-| B: keep LocalTuya; optional read-only MQTT fanout | Existing LocalTuya only | AW730 -> LocalTuya -> HA state -> MQTT subscribers | Reuses healthy broker for other consumers | Extra publication/serialization/ACL, stale data, loop risk | Candidate for observability only; do not create second HA device or command route |
-| C: Go Tuya LAN client with optional MQTT output | Go client ONLY after controlled cutover | AW730 -> Go -> MQTT -> HA | Independent transport and external subscribers | New key custody, state translation, reconnect, MQTT lifecycle, pairing/identity migration | Research/simulation only until explicit canary |
-| D: Go Tuya LAN direct HA adapter | Go client ONLY after controlled cutover | AW730 -> Go -> HA -> HomeKit/Alice | Avoids MQTT hop if only HA consumes data | Requires an HA integration/service boundary and same migration protections | Benchmark against C; do not assume Go is inherently faster end-to-end |
+TinyTuya (MIT) documents LAN 3.1–3.5; 3.4 and 3.5 use different authenticated
+framing and per-session key negotiation. This is a community protocol
+reference, not manufacturer certification for Venta. The TuyaOS vendor
+documentation describes LAN binding/control as separate from cloud
+activation. The LocalTuya guide advises closing Smart Life/Tuya Smart and
+avoiding multiple local integrations because some devices permit one local
+connection. tuya-local documents the same practical limitation and warns
+that re-pairing changes the local key. The actual AW730 session limit and
+rotation behavior remain unverified; do not deliberately re-pair to test it.
 
-B is not a replacement for LocalTuya. C and D require deactivating the old LAN writer before any live connection. MQTT Cloud Client ID/Secret and Tuya local_key have distinct purposes: possessing cloud identifiers does not expose an MQTT endpoint on AW730.
+License assessment: GPL-3.0 obligations must be evaluated before distributing
+a derivative of LocalTuya; do not copy its code into the MIT project.
+MIT/Apache-2.0 dependencies require attribution/license preservation and
+applicable notices. No upstream implementation is bundled or copied in this
+prototype; the Go module uses only the standard library. Verify exact
+license text, attribution, transitive dependencies and security review
+before selecting any real client library. Existing template attribution
+remains unchanged.
 
-## Libraries for a future Go-only prototype
+## Threats and operating constraints
 
-- cB-Sigma/tuyalan: Go module; published v0.3.0 (2026-10-11) under Apache-2.0. Documentation describes Tuya LAN 3.1-3.5, 3.4 session-key negotiation and a separate simulated-device repository. Pre-1.0 API is not a stable contract. No AW730-specific compatibility has been demonstrated.
-- MXVXID/tiny-go: MIT-tagged Go port of tinytuya, with documentation claiming Tuya LAN 3.1-3.5 and Go 1.26+ for its published version. Verify upstream attribution, test coverage, and package source before selecting a dependency; its README claims are not evidence of AW730 functionality.
-- make-all/tuya-local: Python Home Assistant alternative that handles local Tuya firmware with device profiles. It is an option for comparison, NOT a drop-in replacement for the existing validated LocalTuya entity IDs or HomeKit integration.
-- Eclipse Paho paho.golang/autopaho: existing Go MQTT v5 client with automatic reconnect. Use only if an MQTT adapter is justified; do not couple Tuya frame handling to MQTT delivery semantics.
+- Device credentials remain in authorized private configuration. Key rotation
+  is an authentication/reconciliation event: stop writes, obtain the updated
+  key through the supported owner-authorized process, reconnect and read state.
+  Never log keys, brute-force, or automatically re-pair.
+- One active controller of a physical AW730; never test a second LAN client
+  in parallel. Session generation, bounded retry, full-state reconciliation
+  and no replay of unknown writes are required. A successful write dispatch
+  is not evidence of state change.
+- Strict known DP types/values, safe invalid/missing status handling and no
+  unverified reset writes. Reject obsolete session responses and malformed
+  data. Avoid new remote services or unnecessary cloud credentials.
+- MQTT, if justified later, needs scoped credentials, authenticated access,
+  availability and stale-state handling; never retain command messages,
+  duplicate the HA device or feed a command loop.
+- Preserve current config entries, entity IDs, HomeKit bridge/AID/IID, pairing
+  and Alice exports; test reversible migration on synthetic fixtures first.
+  No live action without separate explicit permission.
 
-All candidate dependencies need a locked version, license and security review, API tests, and synthetic frame validation before being adopted.
+## Economic evaluation
 
-## Threat model and invariants
+Keeping LocalTuya adds zero new processes or credential stores. A replacement
+adds a session client, HA integration boundary and independent maintenance
+and migration burden; an MQTT path adds another delivery/security boundary.
+Existing functioning controls provide a concrete baseline; no demonstrated
+reduction in hardware errors, latency, maintenance or resource cost offsets
+the added engineering and pairing risks. No monetary savings estimate is
+claimed. Decision: **NO-GO for production replacement**; retain LocalTuya.
+A simulated contract is worthwhile solely to validate safe state transitions
+and rollback. Revisit only after a reproducible, separately approved,
+single-writer device comparison with measured p50/p95 confirmation/reconnect
+latency, error rate, CPU/RAM and preserved identities. No release 2.0 merely
+to satisfy a version number.
 
-1. Real local_key, Device ID, Tuya cloud credentials, HomeKit keys, pairing materials, private network identifiers, and raw config entries never enter Git, CI artifacts, debug logs or public bug reports.
-2. Exactly one active Tuya LAN controlling session for AW730 during a live migration. No parallel trial connection, polling client, brute-force scan or unsolicited DP command against the physical device.
-3. MQTT uses a separate minimal-privilege account and scoped publish/subscribe ACLs if activated; do not reuse Zigbee2MQTT credentials. Commands must not be retained. Avoid message loops between HA and broker.
-4. MQTT Discovery uses stable unique IDs and re-announces discovery after the Home Assistant birth message; use availability/LWT and explicit state reconciliation. Retained discovery/state can be appropriate for known-safe values, but stale retained topics and duplicate HA devices are failure modes.
-5. Preserve the original HomeKit bridge/AID/IID, config and entity IDs, and Alice export membership. Migration is dry-run first, owner-approved canary second, with backup and rollback.
+## Reproducible research sources
 
-## Reproducible evidence plan (no device actuation by default)
-
-Phase 1 - read-only baseline: inventory versions, Mosquitto and Zigbee2MQTT health, existing HA event chronology and availability errors. Capture sanitized event timestamps and resource counters only. A single Docker resource snapshot is not a performance benchmark; HA CPU cannot be attributed to LocalTuya without instrumentation.
-
-Phase 2 - isolated benchmark: loopback fake Tuya LAN 3.4 device, dedicated disposable MQTT broker and HA fixture. Use deterministic DP mappings for power, Auto/Manual/Sleep, five fan speeds, humidity 30-70%, LED and sensor feedback. Test wrong key, missing DP, half-open session, reconnect, duplicate command IDs, delayed state push, retained command rejection, availability, LWT and discovery collision. No real hardware.
-
-Phase 3 - native Go verification: gofmt, go vet, go test ./..., go test -race ./..., go test -bench=. -benchmem ./...; run through the authorized MCPshka runner/CI profile rather than an unmanaged heavy shell on H96. Python tests remain for the Python HA integration and JavaScript tests remain for the UI. Compare allocations, throughput, goroutine count and CPU/RAM in repeatable profiles.
-
-Phase 4 - evidence comparison: for the same actions and simulated load compare command -> acknowledged state and reconnect latency p50/p95, stale/duplicate event rate, CPU, RAM, process count and maintenance complexity. Live command latency testing requires a separately approved physical-device test; until then report only synthetic numbers and passive observations.
-
-Decision: choose A unless B has a real additional subscriber use case or C/D can prove a worthwhile reduction in failures/latency/maintenance cost while preserving identity and rollback. Do not claim that replacing Python LocalTuya with Go or adding MQTT improves performance without measurements.
-
-## Evidence and remaining V200-01 work
-
-Observed: running/healthy H96 Mosquitto and Zigbee2MQTT containers; verified installed Venta 1.2.0 manifest; project compatibility report for one AW730 Tuya LAN 3.4 system. Public sources below were reviewed 2026-11-23. Still missing: verified real-device concurrent-connection behavior, safe local-key rotation behavior, normalized baseline p50/p95 and reconnect failure rate, source-review of candidate Go modules, broker ACL topology, and an explicit go/no-go decision. Therefore V200-01 remains OPEN.
-
-Sources:
-- https://www.home-assistant.io/integrations/mqtt/
-- https://developer.tuya.com/en/docs/iot-device-dev/TuyaOS-iot_abi_device_active_lan?id=Kcogfpv7g7eb9
+- LocalTuya 2026.10.0, protocol list:
+  https://github.com/xZetsubou/hass-localtuya/blob/7f3be1999f581863ffa984e86ed359857f8bcab1/custom_components/localtuya/const.py
+- LocalTuya connection guidance:
+  https://github.com/xZetsubou/hass-localtuya/blob/7f3be1999f581863ffa984e86ed359857f8bcab1/documentation/docs/usage/configure_add_device.md
+- tuya-local pinned README and license:
+  https://github.com/make-all/tuya-local/blob/e9064cf33d6c1138718b159770b386409a46dc8f/README.md
+- TinyTuya pinned protocol reference:
+  https://github.com/jasonacox/tinytuya/blob/b0482da13af473677a78ea76a94bd8ed2c37a3e7/PROTOCOL.md
+- tuyalan v0.3.0 README, Go module and license metadata:
+  https://github.com/cB-Sigma/tuyalan/tree/98aa6ce4eba103f55175a6d2b4ebfb20fa46798d
 - https://pkg.go.dev/github.com/cB-Sigma/tuyalan
-- https://pkg.go.dev/github.com/MXVXID/tiny-go
-- https://github.com/make-all/tuya-local
-- https://github.com/eclipse-paho/paho.golang
-- docs/compatibility.md (project installation evidence)
-- ROADMAP.md (scope, order, and exit criteria)
+- https://pkg.go.dev/github.com/MXVXID/tiny-go/tuya
+- https://developer.tuya.com/en/docs/iot-device-dev/TuyaOS-iot_abi_device_active_lan?id=Kcogfpv7g7eb9
+- https://www.home-assistant.io/integrations/mqtt/
+- [Existing project compatibility](compatibility.md)
+- [Offline Go simulation](../extras/transport-poc/README.md)
+
+## По-русски
+
+Штатный LocalTuya остаётся рабочим транспортом. Публичные исходники
+подтверждают различия протоколов, возможность смены ключа при повторном
+сопряжении и ограничение числа локальных подключений у части устройств.
+Это не измерения AW730. Исследовательский Go-адаптер не открывает сокеты и не
+хранит ключи. Переход на него экономически не обоснован: выгода не доказана,
+а дополнительные расходы на сопровождение и риски миграции известны.

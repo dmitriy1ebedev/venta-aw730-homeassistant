@@ -31,6 +31,18 @@ jobs:
           python -m unittest discover -s tests -v
           python scripts/check_repository.py
           python scripts/check_publication_security.py
+      - name: Offline Go transport simulation and benchmarks
+        if: ${{ github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant' }}
+        working-directory: extras/transport-poc
+        env:
+          GOTOOLCHAIN: local
+          GOPROXY: off
+          GOSUMDB: off
+        run: |
+          go version
+          go vet ./...
+          go test -race -count=1 -v ./...
+          go test -run '^$' -bench . -benchmem -benchtime=100ms ./...
       - name: Validate optional dashboard JavaScript
         run: |
           node --input-type=module --check < extras/dashboard/venta-airwasher-card.js
