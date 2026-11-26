@@ -365,6 +365,57 @@ jobs:
             -v "$GITHUB_WORKSPACE/scripts/ha_entity_registry_smoke.py:/tmp/venta-registry-smoke.py:ro" \
             "$HA_IMAGE" \
             python /tmp/venta-registry-smoke.py --config /config --ha-version "$HA_VERSION"
+      - name: Checkout exact upstream LocalTuya 2026.10.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: xZetsubou/hass-localtuya
+          ref: 7f3be1999f581863ffa984e86ed359857f8bcab1
+          path: ci-localtuya-upstream
+          persist-credentials: false
+      - name: Validate real LocalTuya API imports and DP selectors without device access
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -e PYTHONPATH=/upstream -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "$GITHUB_WORKSPACE/ci-localtuya-upstream:/upstream:ro" \
+            "$HA_IMAGE" python -c '
+          import importlib
+          import json
+          import sys
+          from pathlib import Path
+          from homeassistant.const import __version__ as ha_version
+          from homeassistant.components.humidifier import HumidifierEntity
+          from homeassistant.components.select import SelectEntity
+          from homeassistant.components.switch import SwitchEntity
+          from homeassistant.components.sensor import SensorEntity
+          from homeassistant.components.button import ButtonEntity
+          from homeassistant.components.fan import FanEntity
+          assert ha_version == sys.argv[1], "wrong HA version"
+          package = Path("/upstream/custom_components/localtuya")
+          manifest = json.loads((package / "manifest.json").read_text())
+          assert manifest["version"] == "2026.10.0", "wrong LocalTuya version"
+          assert manifest["requirements"] == [], "review new dependencies before testing"
+          root = importlib.import_module("custom_components.localtuya")
+          assert Path(root.__file__).resolve().parent == package
+          assert callable(root.async_setup_entry)
+          flow = importlib.import_module("custom_components.localtuya.config_flow")
+          dps = ["1 (value: True)", "2 (value: 55)"]
+          selector = flow.col_to_select(dps, is_dps=True)
+          assert selector("1") == "1" and selector("2") == "2"
+          for name, base, cls in (
+              ("humidifier", HumidifierEntity, "LocalTuyaHumidifier"),
+              ("fan", FanEntity, "LocalTuyaFan"),
+              ("select", SelectEntity, "LocalTuyaSelect"),
+              ("switch", SwitchEntity, "LocalTuyaSwitch"),
+              ("sensor", SensorEntity, "LocalTuyaSensor"),
+              ("button", ButtonEntity, "LocalTuyaButton"),
+          ):
+              module = importlib.import_module("custom_components.localtuya." + name)
+              assert Path(module.__file__).resolve().parent == package
+              assert issubclass(getattr(module, cls), base), name
+              assert isinstance(module.flow_schema(dps), dict), name
+          print("LocalTuya 2026.10.0 real imports and synthetic DP selectors PASS on HA", ha_version)
+          ' "$HA_VERSION"
       - name: Boot, reboot and restore real HA current channel with synthetic UI entries
         run: |
           docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \

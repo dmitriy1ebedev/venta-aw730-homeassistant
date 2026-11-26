@@ -60,6 +60,12 @@ class CISecurityTests(unittest.TestCase):
                 for guard in ("--network none", "--cap-drop ALL", "--security-opt no-new-privileges", '"$HA_IMAGE"'):
                     self.assertIn(guard, command)
                 self.assertNotIn("--privileged", command)
+        upstream = next(step for step in job["steps"] if step.get("with", {}).get("repository") == "xZetsubou/hass-localtuya")
+        self.assertEqual(upstream["with"]["ref"], "7f3be1999f581863ffa984e86ed359857f8bcab1")
+        self.assertIs(upstream["with"]["persist-credentials"], False)
+        real = next(command for command in commands if "real imports and synthetic DP selectors" in command)
+        for required in ("--network none", "ci-localtuya-upstream:/upstream:ro", "manifest", "2026.10.0", "importlib.import_module", "flow.col_to_select", "issubclass"):
+            self.assertIn(required, real)
         smoke = "\n".join(commands)
         for required in ("check_config", "ha_native_homekit_smoke.py", "ha_homekit_identity_smoke.py", "ha_config_flow_smoke.py", "ha_config_entry_setup_smoke.py", "ha_entity_registry_smoke.py", "ha_isolated_boot_smoke.py", "--phase restore"):
             self.assertIn(required, smoke)
