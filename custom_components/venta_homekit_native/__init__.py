@@ -13,6 +13,7 @@ from pathlib import Path
 
 from homeassistant.const import __version__ as HA_VERSION
 from .diagnostics import collect_diagnostics
+from .service_advisories import ServiceAdvisoryMonitor
 
 import voluptuous as vol
 
@@ -548,6 +549,36 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         supports_response=SupportsResponse.OPTIONAL,
     )
 
+    # Opt-in service monitoring. Never guess LocalTuya entity IDs or alter
+    # existing YAML/registry bindings. The owner explicitly maps each sensor.
+    sensor_roles = ("water_level", "filter_days", "cleaning_days", "service_days")
+    sensor_entities = {}
+    for role in sensor_roles:
+        entity_id = values.get(role + "_entity")
+        if entity_id is None:
+            continue
+        try:
+            sensor_entities[role] = cv.entity_id(entity_id)
+        except (vol.Invalid, ValueError, TypeError):
+            _LOGGER.warning("Venta: invalid service sensor mapping for %s", role)
+    if sensor_entities and not hass.data[DOMAIN].get("service_monitor"):
+        monitor = ServiceAdvisoryMonitor(hass, ENTITY, sensor_entities)
+        hass.data[DOMAIN]["service_monitor"] = monitor
+        watched = (ENTITY, *sensor_entities.values())
+
+        @callback
+        def on_service_state_change(event: Event):
+            monitor.update(event.data.get("entity_id"))
+
+        unsub = async_track_state_change_event(
+            hass, watched, on_service_state_change,
+            job_type=HassJobType.Callback,
+        )
+        hass.data[DOMAIN]["service_monitor_unsub"] = unsub
+        # First sample only establishes a baseline; no startup alarm.
+        monitor.update()
+
+
     if hass.is_running:
         hass.async_create_task(_reload_when_bridge_ready(hass))
     else:
@@ -606,6 +637,20 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
         _LOGGER.error("Venta: existing YAML or another UI entry owns the HomeKit patch")
         return False
     values = dict(entry.data)
+    # Service advisories are an explicit UI option, staged without a live
+    # HomeKit reload. Revalidate registry ownership at the next safe setup.
+    advisory_options = getattr(entry, "options", {}).get("service_advisory_entities")
+    if advisory_options:
+        from homeassistant.helpers import entity_registry as er
+        from .service_advisories import validated_service_entities
+
+        valid = validated_service_entities(
+            er.async_get(hass), values.get("humidifier_entity"), advisory_options,
+        )
+        if len(valid) != len(advisory_options):
+            _LOGGER.warning("Venta: stale service sensor mappings suppressed")
+        for role, entity_id in valid.items():
+            values[f"{role}_entity"] = entity_id
     try:
         selections = {
             role: values.get(f"{role}_entity")

@@ -41,6 +41,22 @@ If you are adding the device **before** configuring the Venta HomeKit extension,
 
 **Alice:** expose the same humidifier entity with [Yaha Cloud](https://docs.yaha-cloud.ru/) ([source](https://github.com/dext0r/yandex_smart_home)).
 
+## Service advisories (1.3.0 candidate; not yet installed)
+
+Service notifications are optional and read-only. In an existing UI-configured
+Venta entry, open **Options**, select the LocalTuya sensors for water level (%),
+filter, cleaning and service intervals (days), then explicitly confirm the
+choice. Only sensors registered to the same LocalTuya device are offered.
+The setting does not touch the running HomeKit bridge or restart Home Assistant:
+it takes effect on the next separately approved safe start.
+
+For YAML configuration, the optional keys are `water_level_entity`,
+`filter_days_entity`, `cleaning_days_entity` and `service_days_entity`.
+Unspecified sensors remain disabled. Repeated relevant sensor events are
+required for warnings; a startup `unavailable` state does not generate an
+alert. Nothing writes or resets a device maintenance counter; reset testing
+requires separate owner consent.
+
 ## Compatibility
 
 Verified on one Venta AW730 Smart Life/Tuya 3.4 installation with LocalTuya 2026.10.0 and Home Assistant 2026.11.1. HA 2026.11.2, 2026.11.3 and 2026.12.0b0 have passed isolated CI only; other models and untested versions are not verified. See the [compatibility and troubleshooting matrix](docs/compatibility.md). The extension depends on internal HomeKit APIs and may need updates after major HA releases.

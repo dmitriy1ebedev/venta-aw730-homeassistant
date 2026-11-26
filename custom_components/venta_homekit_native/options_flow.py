@@ -10,6 +10,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.helpers import entity_registry as er
 
 from . import DOMAIN
 from .binding_review import (
@@ -22,6 +23,7 @@ from .binding_review import (
     review_proposal,
 )
 from .entity_discovery import DiscoveryError, ROLES
+from .service_advisories import SERVICE_ROLES, eligible_service_sensor_ids
 
 PROPOSAL = "review_proposal"
 SOURCE_SNAPSHOT = "review_source"
@@ -54,8 +56,33 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
         bridges = bridge_choices(self.hass)
         if not bridges:
             return self.async_abort(reason="bridge_unavailable")
+        available_service_sensors = eligible_service_sensor_ids(
+            er.async_get(self.hass), current.get("humidifier_entity")
+        )
+        stored_service_map = entry.options.get("service_advisory_entities", {})
+        if not isinstance(stored_service_map, dict):
+            stored_service_map = {}
         errors: dict[str, str] = {}
         if user_input is not None:
+            requested_service_map = {}
+            for role in SERVICE_ROLES:
+                field = f"{role}_entity"
+                selected = user_input.get(field, stored_service_map.get(role, ""))
+                if not isinstance(selected, str) or (
+                    selected and selected not in available_service_sensors
+                ):
+                    errors[field] = "invalid_entity"
+                elif selected:
+                    requested_service_map[role] = selected
+            if len(requested_service_map) != len(set(requested_service_map.values())):
+                errors["base"] = "distinct_service_entities_required"
+            if (
+                not errors
+                and requested_service_map != stored_service_map
+                and requested_service_map
+                and user_input.get("confirm_service_monitoring") is not True
+            ):
+                errors["base"] = "service_monitoring_confirmation_required"
             selections = {
                 role: user_input.get(f"{role}_entity")
                 for role in ROLES
@@ -65,10 +92,11 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
                 if user_input.get(f"confirm_{role}") is True
                 and selections[role] in plan["roles"][role]["unclassified"]
             )
-            errors, proposal = review_proposal(
+            review_errors, proposal = review_proposal(
                 self.hass, current, user_input.get(BRIDGE), selections,
                 confirmed_unclassified=confirmed,
             )
+            errors.update(review_errors)
             if not errors and user_input.get("confirm_staging") is not True:
                 errors["base"] = "staging_confirmation_required"
             if not errors and proposal is not None:
@@ -80,6 +108,10 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
                     # Explicitly discards only our own obsolete review.
                     options.pop(PROPOSAL, None)
                     options.pop(SOURCE_SNAPSHOT, None)
+                if requested_service_map:
+                    options["service_advisory_entities"] = requested_service_map
+                else:
+                    options.pop("service_advisory_entities", None)
                 return self.async_create_entry(title="", data=options)
 
         def required_choice(key: str, choices: Any) -> Any:
@@ -101,6 +133,15 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
                 schema[vol.Optional(
                     f"confirm_{role}", default=role in saved_confirmed,
                 )] = bool
+        for role in SERVICE_ROLES:
+            field = f"{role}_entity"
+            schema[vol.Optional(
+                field, default=stored_service_map.get(role, "")
+            )] = vol.In({
+                "": "Disabled",
+                **{entity_id: entity_id for entity_id in available_service_sensors},
+            })
+        schema[vol.Optional("confirm_service_monitoring", default=False)] = bool
         schema[vol.Required("confirm_staging", default=False)] = bool
         return self.async_show_form(
             step_id="init", data_schema=vol.Schema(schema), errors=errors,
