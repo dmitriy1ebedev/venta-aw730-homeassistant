@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import runpy
 import re
 import struct
 import sys
@@ -27,6 +29,9 @@ def validate() -> list[str]:
         "docs/CI_SECURITY.md",
         "docs/DIAGNOSTICS.md",
         "custom_components/venta_homekit_native/diagnostics.py",
+        "custom_components/venta_homekit_native/model_profiles.py",
+        "tests/test_model_profiles.py",
+        "docs/MODEL_PROFILES.md",
         "custom_components/venta_homekit_native/entity_discovery.py",
         "custom_components/venta_homekit_native/binding_review.py",
         "custom_components/venta_homekit_native/options_flow.py",
@@ -114,9 +119,12 @@ def validate() -> list[str]:
     try:
         import yaml
 
-        template = yaml.safe_load((INTEGRATION / "templates/venta_aw730.yaml").read_text())
-        if not isinstance(template, list) or len(template) != 18:
-            problems.append("Bundled LocalTuya template has unexpected structure")
+        profiles = runpy.run_path(str(INTEGRATION / "model_profiles.py"))
+        profile = profiles["AW730"]
+        raw = (INTEGRATION / "templates" / profile.template).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != profile.template_sha256:
+            problems.append("Bundled AW730 template digest does not match reviewed profile")
+        problems.extend("AW730 profile: " + error for error in profiles["template_errors"](profile, yaml.safe_load(raw)))
     except (OSError, ValueError, ImportError) as exc:
         problems.append("Invalid LocalTuya YAML: " + str(exc))
 

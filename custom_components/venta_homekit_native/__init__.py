@@ -35,6 +35,7 @@ from homeassistant.components.homekit.type_humidifiers import (
     HumidifierDehumidifier as NativeHumidifierDehumidifier,
 )
 from .install_localtuya_template import sync_managed_template
+from .model_profiles import AW730
 
 DOMAIN = "venta_homekit_native"
 ENTITY = BRIDGE_ENTRY = FAN = LED = BRIGHTNESS = TEMPERATURE = HUMIDITY = None
@@ -267,7 +268,7 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
                 {ATTR_ENTITY_ID: ENTITY, "mode": mode}, blocking=True,
             )
         if speed is not None and speed > 0:
-            level = str(max(1, min(5, round(speed / 20))))
+            level = str(max(1, min(AW730.fan_levels, round(speed / AW730.fan_step_percent))))
             await self.hass.services.async_call(
                 "select", "select_option",
                 {ATTR_ENTITY_ID: FAN, "option": level}, blocking=True,
@@ -283,7 +284,7 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
             )
         if "Brightness" in values:
             brightness = float(values["Brightness"])
-            level = str(max(1, min(8, round(brightness * 8 / 100))))
+            level = str(max(1, min(AW730.brightness_levels, round(brightness * AW730.brightness_levels / 100))))
             self.async_call_service(
                 "select", "select_option",
                 {ATTR_ENTITY_ID: BRIGHTNESS, "option": level}, "LED brightness",
@@ -309,13 +310,13 @@ class VentaEnhancedHumidifier(NativeHumidifierDehumidifier):
             1 if hum and hum.attributes.get("mode") == "Auto" else 0
         )
         try:
-            speed = max(0, min(100, int(fan.state) * 20))
+            speed = max(0, min(100, int(fan.state) * AW730.fan_step_percent))
         except (TypeError, ValueError, AttributeError):
             speed = 0
         self._venta_fan_speed.set_value(speed)
         self._venta_led_on.set_value(bool(led and led.state == STATE_ON))
         try:
-            level = max(1, min(100, round(int(brightness.state) * 100 / 8)))
+            level = max(1, min(100, round(int(brightness.state) * 100 / AW730.brightness_levels)))
             self._venta_led_brightness.set_value(level)
         except (TypeError, ValueError, AttributeError):
             pass

@@ -32,6 +32,8 @@ The GitHub CI source SHA, Home Assistant container version and result must be re
 
 The device firmware version and any variations of its DP schema were not independently recorded. Do not infer universal compatibility from one tested device. Avoid submitting serial numbers, cloud Device IDs, keys or private addresses as evidence.
 
+See [model profiles and evidence requirements](MODEL_PROFILES.md). AW735 is explicitly unverified and has no active profile; the AW730 mapping is not a fallback for other models or protocols.
+
 ## Installation and non-destructive verification
 
 1. Install the tested [LocalTuya fork](https://github.com/xZetsubou/hass-localtuya) and configure your **own** Smart Life / Tuya device through its configuration UI. Confirm this is the AW730 Tuya 3.4 variant before applying the supplied template.
