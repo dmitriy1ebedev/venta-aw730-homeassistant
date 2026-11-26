@@ -25,6 +25,16 @@ unchanged. The existing three diagnostic reset buttons remain unverified;
 the profile does not enable or invoke them. Mapping metadata alone is not
 permission to write a DP.
 
+## Release scope and deferred hardware work
+
+The 1.3.0 model scope is the existing AW730 combination, not a promise of
+additional device support. The second-model hardware acceptance remains
+unperformed because a suitable device/evidence is unavailable. Track this
+separately in [issue #41](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/issues/41).
+The original physical criterion must not be recorded as a successful test.
+Unknown model/protocol pairs remain unsupported until the evidence below is
+obtained.
+
 ## Evidence before adding another model
 
 1. Record printed model, firmware **version**, Tuya LAN protocol, HA and

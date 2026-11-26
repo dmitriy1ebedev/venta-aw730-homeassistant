@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -110,14 +111,98 @@ def validate(config_dir: Path, expected_ha_version: str) -> dict:
         assert fake.services.calls[-1][2]["mode"] == "Auto"
         assert accessory.char_target_humidifier_dehumidifier.value == 0
 
+    async def verify_real_ha_service_advisories():
+        # Exercise the real HA event bus and persistent notification services,
+        # not a stand-in service recorder. No LocalTuya connection or reset.
+        from homeassistant.core import HomeAssistant, callback, HassJobType
+        from homeassistant.const import EVENT_CALL_SERVICE
+        from homeassistant.helpers.event import async_track_state_change_event
+        from homeassistant.components.persistent_notification.services import async_setup_services
+        from homeassistant.components.persistent_notification.helpers import _async_get_or_create_notifications
+        from custom_components.venta_homekit_native.service_advisories import ServiceAdvisoryMonitor
+
+        with tempfile.TemporaryDirectory(prefix="venta-advisory-ci-") as tmp:
+            hass = HomeAssistant(tmp)
+            async_setup_services(hass)
+            humidifier = "humidifier.venta_ci_fixture"
+            water = "sensor.venta_ci_water"
+            roles = {
+                "water_level": water,
+                "filter_days": "sensor.venta_ci_filter",
+                "cleaning_days": "sensor.venta_ci_cleaning",
+                "service_days": "sensor.venta_ci_service",
+            }
+            hass.states.async_set(humidifier, "on")
+            for role, sensor in roles.items():
+                hass.states.async_set(sensor, "20")
+            monitor = ServiceAdvisoryMonitor(hass, humidifier, roles)
+            monitor.update()
+            called = []
+
+            @callback
+            def observed_call(event):
+                called.append((event.data.get("domain"), event.data.get("service")))
+
+            @callback
+            def observed_state(event):
+                monitor.update(event.data.get("entity_id"))
+
+            unsub_call = hass.bus.async_listen(EVENT_CALL_SERVICE, observed_call)
+            unsub = async_track_state_change_event(hass, (humidifier, *roles.values()), observed_state, job_type=HassJobType.Callback)
+            prefix = "venta_service_"
+
+            def notifications():
+                return set(_async_get_or_create_notifications(hass))
+
+            async def report(entity_id, value):
+                hass.states.async_set(entity_id, value, force_update=True)
+                await hass.async_block_till_done()
+
+            try:
+                await hass.async_block_till_done()
+                assert not notifications(), "startup alarm"
+                await report(water, "8")
+                await report(roles["filter_days"], "19")
+                assert not notifications(), "unrelated report confirmed low water"
+                await report(water, "7")
+                assert notifications() == {prefix + "check_water_level"}
+                before = len(called)
+                await report(water, "6")
+                assert len(called) == before, "duplicate notification"
+                await report(humidifier, "invalid_fixture_state")
+                assert notifications() == {prefix + "device_unavailable"}
+                await report(water, "0")
+                assert notifications() == {prefix + "device_unavailable"}
+                await report(humidifier, "off")
+                assert not notifications(), "recovery alarm before second reading"
+                await report(water, "9")
+                assert notifications() == {prefix + "check_water_level"}
+                await report(water, "80")
+                assert not notifications()
+                for role in ("filter_days", "cleaning_days", "service_days"):
+                    await report(roles[role], "0")
+                    assert prefix + "inspect_" + role not in notifications()
+                    await report(roles[role], "0")
+                    assert prefix + "inspect_" + role in notifications()
+                assert len(notifications()) == 3
+                monitor.dismiss_all()
+                await hass.async_block_till_done()
+                assert not notifications()
+                assert called and all(domain == "persistent_notification" and service in ("create", "dismiss") for domain, service in called), "unexpected service dispatch"
+            finally:
+                unsub()
+                unsub_call()
+                await hass.async_block_till_done()
+
     asyncio.run(verify_real_ha_command_dispatch())
+    asyncio.run(verify_real_ha_service_advisories())
     assert TYPES.get("HumidifierDehumidifier") is NativeHumidifier, "global HomeKit registry changed"
     return {
         "status": "PASS",
         "home_assistant": ha_version,
         "real_homekit_base": NativeHumidifier.__name__,
         "real_pyhap_types": True,
-        "tests": ["imports", "TYPES_identity", "humidity_30_45_70", "invalid_mode", "Auto_dispatch"],
+        "tests": ["imports", "TYPES_identity", "humidity_30_45_70", "invalid_mode", "Auto_dispatch", "real_ha_advisory_events_and_notifications"],
         "synthetic_entity_only": True,
     }
 
