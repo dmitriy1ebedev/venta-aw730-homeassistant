@@ -1,6 +1,6 @@
 # Venta AW730 — compatibility and support
 
-Status recorded: 2026-11-23. Only combinations backed by actual checks are marked **Verified**. Other Venta products and firmware variants are **not supported claims** until tested. Update this matrix after evidence from a real device and an isolated Home Assistant test environment.
+Status recorded: 2026-11-26. Only combinations backed by actual checks are marked **Verified**. Other Venta products and firmware variants are **not supported claims** until tested. Update this matrix after evidence from a real device and an isolated Home Assistant test environment.
 
 ## Compatibility matrix
 
@@ -9,7 +9,7 @@ Status recorded: 2026-11-23. Only combinations backed by actual checks are marke
 | Physical air washer | **Venta AW730 AeroStyle Compact**, Smart Life / Tuya variant | **Verified** with one physical unit; on/off and readback, sensors and modes exercised on 2026-11-21/22 |
 | Local protocol | Tuya LAN **3.4** | **Verified** for that unit through LocalTuya; other Tuya revisions untested |
 | LocalTuya | [xZetsubou/hass-localtuya](https://github.com/xZetsubou/hass-localtuya), **2026.10.0** | **Verified** on H96; 18 imported LocalTuya entities using bundled `venta_aw730.yaml` |
-| Home Assistant | **2026.11.1** on H96; **2026.11.2** isolated CI | **2026.11.1 verified in production**; **2026.11.2 tested only in disposable CI** (HomeKit API, YAML restore, synthetic UI setup). The beta of 2026.12 is not yet tested |
+| Home Assistant | **2026.11.1** on H96; **2026.11.2**, **2026.11.3**, and **2026.12.0b0** isolated CI | **2026.11.1 verified in production**; **2026.11.2 tested only in disposable CI** (HomeKit API, YAML restore, synthetic UI setup). The 2026.11.3 stable and 2026.12.0b0 beta passed disposable CI only (synthetic LocalTuya registry; no live device) |
 | Venta extension | `venta_homekit_native` **1.2.0** (custom Marketplace repository / GitHub Release) | **Verified operational canary on H96** with HA healthy and original HomeKit bridge identity, accepted 2026-11-23; previous **1.0.4** retained as rollback baseline |
 | Apple Home | Existing HomeKit Bridge, Venta as **one** humidifier with linked fan, Auto, LED and temperature services | **Verified** for this bridge/accessory arrangement; not a guarantee for other iOS/HomeKit versions |
 | Yandex / Alice | Yaha Cloud exports the **same** HA humidifier and Venta LED helpers | **Export membership verified** from Home Assistant configuration; voice-command behavior is **not independently verified** |
@@ -22,8 +22,11 @@ Status recorded: 2026-11-23. Only combinations backed by actual checks are marke
 |---|---|---|
 | **2026.11.1** (stable patch) | **Tested on H96** with Venta 1.2.0 canary; separate disposable GitHub CI | **TESTED**, existing HomeKit identity and LocalTuya/Yaha configuration preserved; no new device writes |
 | **2026.11.2** (stable patch, latest published when checked 2026-11-23) | **Disposable CI only**, including real HA/PyHAP API imports, synthetic ConfigFlow, registry, three boots and YAML rollback (GitHub Actions 45137841054, 5/5 PASS) | **TESTED IN ISOLATION**; does not authorize production HA upgrade or establish physical-device compatibility |
-| **Next 2026.12 beta** | No published beta release found via Home Assistant Core GitHub releases on 2026-11-23; available only when upstream publishes it | **PENDING / NOT TESTED**; do not report beta compatibility or upgrade H96. Recheck the official upstream release and run the same disposable tests against its exact image once available |
+| **2026.11.3** (stable, published 2026-11-23) | Real HA/PyHAP, synthetic LocalTuya registry, ConfigFlow, identity, isolated boots and rollback | **TESTED IN ISOLATION**; GitHub Actions 45759800364, 7/7 PASS |
+| **2026.12.0b0** (beta, published 2026-11-25) | Same isolated checks using upstream generic x86-64 image | **TESTED IN ISOLATION**; GitHub Actions 45759800364, 7/7 PASS; never install beta on H96 for this check |
 | Other untested HA versions / HomeKit or LocalTuya API changes | No isolated evidence on these exact versions | **UNVERIFIED**, fail closed for new installs/releases until compatibility smoke passes; never modify the working existing bridge as a test shortcut |
+
+Evidence for 2026.11.3 and 2026.12.0b0: GitHub PR #28, source `7c03516ebd37a9d03ed567429739faa683d8cfbd`, [run 45759800364](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/runs/45759800364). LocalTuya coverage is a synthetic registry/configuration contract, not execution of the LocalTuya integration or physical device.
 
 The GitHub CI source SHA, Home Assistant container version and result must be recorded together; a prior success is not transferable to a new beta image. CI's network-disabled disposable tests do not issue commands to the physical air washer or access private HomeKit pairing records. Upstream beta schedule and versioning: https://contributors.home-assistant.io/releases/how-it-works/ .
 

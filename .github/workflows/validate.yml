@@ -263,3 +263,164 @@ jobs:
             -v "$GITHUB_WORKSPACE/scripts/ha_isolated_boot_smoke.py:/tmp/venta-boot-smoke.py:ro" \
             ghcr.io/home-assistant/home-assistant:2026.11.2 \
             python /tmp/venta-boot-smoke.py --config /source --ha-version 2026.11.2 --boot-timeout 95
+
+  ha_current_channel_smoke:
+    name: Disposable Home Assistant ${{ matrix.ha_version }} channel smoke
+    # V110-05: explicit stable and beta images; failures block validation.
+    if: ${{ github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ha_version: '2026.11.3'
+            image: ghcr.io/home-assistant/home-assistant:2026.11.3
+          - ha_version: '2026.12.0b0'
+            image: ghcr.io/home-assistant/generic-x86-64-homeassistant:2026.12.0b0
+    env:
+      HA_VERSION: ${{ matrix.ha_version }}
+      HA_IMAGE: ${{ matrix.image }}
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build component-only archive and isolated fake configuration
+        run: |
+          python3 scripts/build_release.py --output "$RUNNER_TEMP/venta-ci-source.zip"
+          python3 -m scripts.stage_ha_runtime --archive "$RUNNER_TEMP/venta-ci-source.zip" --config "$RUNNER_TEMP/venta-ha-config"
+      - name: Validate integration with real Home Assistant in disposable container
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -v "$RUNNER_TEMP/venta-ha-config:/config" \
+            "$HA_IMAGE" \
+            python -m homeassistant --script check_config --config /config
+      - name: Rehearse exact synthetic YAML cutover and rollback on HA current channel
+        run: |
+          python3 -m scripts.ha_snapshot_rehearsal --config "$RUNNER_TEMP/venta-ha-config" --state "$RUNNER_TEMP/venta-ci-snapshot" --phase capture
+          python3 -m scripts.ha_snapshot_rehearsal --config "$RUNNER_TEMP/venta-ha-config" --state "$RUNNER_TEMP/venta-ci-snapshot" --phase cutover
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -v "$RUNNER_TEMP/venta-ha-config:/config" \
+            "$HA_IMAGE" \
+            python -m homeassistant --script check_config --config /config
+          python3 -m scripts.ha_snapshot_rehearsal --config "$RUNNER_TEMP/venta-ha-config" --state "$RUNNER_TEMP/venta-ci-snapshot" --phase restore
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -v "$RUNNER_TEMP/venta-ha-config:/config" \
+            "$HA_IMAGE" \
+            python -m homeassistant --script check_config --config /config
+      - name: Validate native HomeKit and PyHAP command APIs without pairing
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -v "$RUNNER_TEMP/venta-ha-config:/config:ro" \
+            -v "$GITHUB_WORKSPACE/scripts/ha_native_homekit_smoke.py:/tmp/venta-homekit-smoke.py:ro" \
+            "$HA_IMAGE" \
+            python /tmp/venta-homekit-smoke.py --config /config --ha-version "$HA_VERSION"
+      - name: Validate stable HomeKit AID/IID and native non-Venta accessories
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -v "$RUNNER_TEMP/venta-ha-config:/config:ro" \
+            -v "$GITHUB_WORKSPACE/scripts/ha_homekit_identity_smoke.py:/tmp/venta-identity-smoke.py:ro" \
+            "$HA_IMAGE" \
+            python /tmp/venta-identity-smoke.py --config /config --ha-version "$HA_VERSION"
+      - name: Verify synthetic HomeKit identity across independent HA current channel processes
+        run: |
+          mkdir -p "$RUNNER_TEMP/venta-ci-identity"
+          for phase in capture verify; do
+            docker run --rm --user "$(id -u):$(id -g)" --network none --cap-drop ALL --security-opt no-new-privileges \
+              --pids-limit 256 --memory 2g --cpus 2 \
+              -v "$RUNNER_TEMP/venta-ha-config:/config:ro" \
+              -v "$RUNNER_TEMP/venta-ci-identity:/state" \
+              -v "$GITHUB_WORKSPACE/scripts/ha_homekit_identity_smoke.py:/tmp/venta-identity-smoke.py:ro" \
+              "$HA_IMAGE" \
+              python /tmp/venta-identity-smoke.py --config /config --ha-version "$HA_VERSION" \
+                --state-file /state/allocations.json --state-mode "$phase"
+          done
+      - name: Exercise real HA current channel ConfigFlow with synthetic Venta entities
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -v "$RUNNER_TEMP/venta-ha-config:/config:ro" \
+            -v "$GITHUB_WORKSPACE/scripts/ha_config_flow_smoke.py:/tmp/venta-config-flow-smoke.py:ro" \
+            "$HA_IMAGE" \
+            python /tmp/venta-config-flow-smoke.py --config /config --ha-version "$HA_VERSION"
+      - name: Exercise real HA current channel config-entry setup and replay without pairing
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -v "$RUNNER_TEMP/venta-ha-config:/config:ro" \
+            -v "$GITHUB_WORKSPACE/scripts/ha_config_entry_setup_smoke.py:/tmp/venta-entry-setup-smoke.py:ro" \
+            "$HA_IMAGE" \
+            python /tmp/venta-entry-setup-smoke.py --config /config --ha-version "$HA_VERSION"
+      - name: Validate read-only LocalTuya registry choices against HA current channel
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -v "$RUNNER_TEMP/venta-ha-config:/config:ro" \
+            -v "$GITHUB_WORKSPACE/scripts/ha_entity_registry_smoke.py:/tmp/venta-registry-smoke.py:ro" \
+            "$HA_IMAGE" \
+            python /tmp/venta-registry-smoke.py --config /config --ha-version "$HA_VERSION"
+      - name: Checkout exact upstream LocalTuya 2026.10.0
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: xZetsubou/hass-localtuya
+          ref: 7f3be1999f581863ffa984e86ed359857f8bcab1
+          path: ci-localtuya-upstream
+          persist-credentials: false
+      - name: Validate real LocalTuya API imports and DP selectors without device access
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -e PYTHONPATH=/upstream -e PYTHONDONTWRITEBYTECODE=1 \
+            -v "$GITHUB_WORKSPACE/ci-localtuya-upstream:/upstream:ro" \
+            "$HA_IMAGE" python -c '
+          import importlib
+          import json
+          import sys
+          from pathlib import Path
+          from homeassistant.const import __version__ as ha_version
+          from homeassistant.components.humidifier import HumidifierEntity
+          from homeassistant.components.select import SelectEntity
+          from homeassistant.components.switch import SwitchEntity
+          from homeassistant.components.sensor import SensorEntity
+          from homeassistant.components.button import ButtonEntity
+          from homeassistant.components.fan import FanEntity
+          assert ha_version == sys.argv[1], "wrong HA version"
+          package = Path("/upstream/custom_components/localtuya")
+          manifest = json.loads((package / "manifest.json").read_text())
+          assert manifest["version"] == "2026.10.0", "wrong LocalTuya version"
+          assert manifest["requirements"] == [], "review new dependencies before testing"
+          root = importlib.import_module("custom_components.localtuya")
+          assert Path(root.__file__).resolve().parent == package
+          assert callable(root.async_setup_entry)
+          flow = importlib.import_module("custom_components.localtuya.config_flow")
+          dps = ["1 (value: True)", "2 (value: 55)"]
+          selector = flow.col_to_select(dps, is_dps=True)
+          assert selector("1") == "1" and selector("2") == "2"
+          for name, base, cls in (
+              ("humidifier", HumidifierEntity, "LocalTuyaHumidifier"),
+              ("fan", FanEntity, "LocalTuyaFan"),
+              ("select", SelectEntity, "LocalTuyaSelect"),
+              ("switch", SwitchEntity, "LocalTuyaSwitch"),
+              ("sensor", SensorEntity, "LocalTuyaSensor"),
+              ("button", ButtonEntity, "LocalTuyaButton"),
+          ):
+              module = importlib.import_module("custom_components.localtuya." + name)
+              assert Path(module.__file__).resolve().parent == package
+              assert issubclass(getattr(module, cls), base), name
+              assert isinstance(module.flow_schema(dps), dict), name
+          print("LocalTuya 2026.10.0 real imports and synthetic DP selectors PASS on HA", ha_version)
+          ' "$HA_VERSION"
+      - name: Boot, reboot and restore real HA current channel with synthetic UI entries
+        run: |
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 256 --memory 2g --cpus 2 \
+            -v "$RUNNER_TEMP/venta-ha-config:/source:ro" \
+            -v "$GITHUB_WORKSPACE/scripts/ha_isolated_boot_smoke.py:/tmp/venta-boot-smoke.py:ro" \
+            "$HA_IMAGE" \
+            python /tmp/venta-boot-smoke.py --config /source --ha-version "$HA_VERSION" --boot-timeout 95

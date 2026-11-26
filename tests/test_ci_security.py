@@ -46,6 +46,30 @@ class CISecurityTests(unittest.TestCase):
         for required in ("scripts/build_release.py", "scripts.stage_ha_runtime", "scripts/ha_native_homekit_smoke.py", "scripts/ha_homekit_identity_smoke.py", "scripts/ha_entity_registry_smoke.py", "ghcr.io/home-assistant/home-assistant:2026.11.1", "--network none", "check_config --config /config", "--ha-version 2026.11.1"):
             self.assertIn(required, smoke)
 
+    def test_current_stable_and_beta_smoke_are_mandatory_and_isolated(self):
+        job = self.workflow["jobs"]["ha_current_channel_smoke"]
+        self.assertFalse(job["strategy"]["fail-fast"])
+        self.assertNotIn("continue-on-error", job)
+        self.assertEqual(job["strategy"]["matrix"]["include"], [
+            {"ha_version": "2026.11.3", "image": "ghcr.io/home-assistant/home-assistant:2026.11.3"},
+            {"ha_version": "2026.12.0b0", "image": "ghcr.io/home-assistant/generic-x86-64-homeassistant:2026.12.0b0"},
+        ])
+        commands = [step["run"] for step in job["steps"] if "run" in step]
+        for command in commands:
+            if "docker run" in command:
+                for guard in ("--network none", "--cap-drop ALL", "--security-opt no-new-privileges", '"$HA_IMAGE"'):
+                    self.assertIn(guard, command)
+                self.assertNotIn("--privileged", command)
+        upstream = next(step for step in job["steps"] if step.get("with", {}).get("repository") == "xZetsubou/hass-localtuya")
+        self.assertEqual(upstream["with"]["ref"], "7f3be1999f581863ffa984e86ed359857f8bcab1")
+        self.assertIs(upstream["with"]["persist-credentials"], False)
+        real = next(command for command in commands if "real imports and synthetic DP selectors" in command)
+        for required in ("--network none", "ci-localtuya-upstream:/upstream:ro", "manifest", "2026.10.0", "importlib.import_module", "flow.col_to_select", "issubclass"):
+            self.assertIn(required, real)
+        smoke = "\n".join(commands)
+        for required in ("check_config", "ha_native_homekit_smoke.py", "ha_homekit_identity_smoke.py", "ha_config_flow_smoke.py", "ha_config_entry_setup_smoke.py", "ha_entity_registry_smoke.py", "ha_isolated_boot_smoke.py", "--phase restore"):
+            self.assertIn(required, smoke)
+
     def test_topic_exception_is_explicit_and_documented(self):
         hacs = self.workflow["jobs"]["hacs"]
         validations = [step for step in hacs["steps"] if step.get("uses", "").startswith("hacs/action@")]

@@ -63,7 +63,12 @@ class DocumentationContractTests(unittest.TestCase):
         self.assertIn("not independently verified", matrix)
         self.assertIn("**2026.11.2**", matrix)
         self.assertIn("**TESTED IN ISOLATION**", matrix)
-        self.assertIn("**PENDING / NOT TESTED**", matrix)
+        for version in ("2026.11.3", "2026.12.0b0"):
+            row = next(line for line in matrix.splitlines() if line.startswith(f"| **{version}**"))
+            self.assertIn("**TESTED IN ISOLATION**", row)
+            self.assertIn("45759800364", row)
+        self.assertIn("synthetic registry/configuration contract", matrix)
+        self.assertIn("7c03516ebd37a9d03ed567429739faa683d8cfbd", matrix)
         self.assertIn("**1.2.0**", matrix)
         self.assertIn("45137841054", matrix)
         self.assertIn("never modify the working existing bridge", matrix.lower())
