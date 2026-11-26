@@ -83,7 +83,12 @@
           "humidity_entity": "Humidity",
           "confirm_temperature": "I verified the temperature sensor type",
           "confirm_humidity": "I verified the humidity sensor type",
-          "confirm_staging": "I understand this only stages a proposal"
+          "confirm_staging": "I understand this only stages a proposal",
+          "water_level_entity": "Water level sensor (%) — optional",
+          "filter_days_entity": "Filter interval sensor (days) — optional",
+          "cleaning_days_entity": "Cleaning interval sensor (days) — optional",
+          "service_days_entity": "Service interval sensor (days) — optional",
+          "confirm_service_monitoring": "I explicitly enable read-only service notifications after the next safe HA start"
         }
       }
     },
