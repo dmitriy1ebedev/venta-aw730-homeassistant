@@ -27,5 +27,5 @@ class TransportResearchTests(unittest.TestCase):
     def test_research_explicitly_limits_claims(self):
         research = (ROOT / "docs/TRANSPORT_RESEARCH.md").read_text()
         for value in ("NO-GO", "GPL-3.0", "Apache-2.0", "404", "not measured", "no monetary savings", "no upstream implementation"):
-            self.assertIn(value.lower(), research.lower())
+            self.assertIn(value.lower(), " ".join(research.lower().split()))
         self.assertIn("simulation", (POC / "README.md").read_text().lower())
