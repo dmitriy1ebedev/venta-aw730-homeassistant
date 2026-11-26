@@ -71,6 +71,7 @@ func TestReconnectRequiresCompleteSnapshot(t *testing.T) {
 func TestTwoAdaptersFenceOldSession(t *testing.T) {
  a,d:=ready(t)
  b:=NewAdapter(d);if err:=b.Reconnect();err!=nil{t.Fatal(err)}
+ if _,ok:=a.State();ok{t.Fatal("replaced session still available")}
  if r,err:=a.Apply(Command{"old",DP{"1":true}});err==nil||r.Confirmed{t.Fatal("old session wrote")}
  if d.Writes()!=0{t.Fatal("old writer dispatched")}
  if r,err:=b.Apply(Command{"new",DP{"1":true}});err!=nil||!r.Confirmed{t.Fatal(err)}
@@ -91,6 +92,23 @@ func TestMigrationIdentityAndRollback(t *testing.T) {
  if _,err=DryRun(changed);!errors.Is(err,ErrMigration){t.Fatal(err)}
  p.After.Identity.IIDs[0]++
  if _,err=p.Rollback(p.After);!errors.Is(err,ErrMigration){t.Fatal(err)}
+}
+func TestProjectionAndIdentity(t *testing.T) {
+ a,d:=ready(t)
+ plan,err:=DryRun(SyntheticFixture());if err!=nil{t.Fatal(err)}
+ before,err:=Project(a,plan.Before);if err!=nil||before.State==nil{t.Fatal(err)}
+ if before.State.Mode!="Manual"||before.State.TargetHumidity!=50||before.State.CurrentHumidity!=44||before.State.FanLevel!=1||before.State.BrightnessLevel!=4{t.Fatal("incorrect initial state")}
+ if before.State.Temperature!=nil||before.State.PM25!=nil||before.State.Water!=nil{t.Fatal("invented optional readings")}
+ d.mu.Lock();d.values["10"]=23;d.values["32"]=11;d.values["102"]=25;d.mu.Unlock()
+ if err:=a.Reconnect();err!=nil{t.Fatal(err)}
+ if _,err:=a.Apply(Command{"auto",DP{"1":true,"24":"automatic","13":60}});err!=nil{t.Fatal(err)}
+ after,err:=Project(a,plan.After);if err!=nil||after.State==nil{t.Fatal(err)}
+ if after.Identity!=before.Identity||after.Identity.Entity!=after.Identity.AliceEntity||after.Identity.EntityBindings[0]!=after.Identity.Entity{t.Fatal("identity or export drift")}
+ if !after.State.Power||after.State.Mode!="Auto"||after.State.TargetHumidity!=60||*after.State.Temperature!=23||*after.State.PM25!=11||*after.State.Water!=25{t.Fatal("incorrect projected state")}
+ changed:=plan.After;changed.Identity.ConfigEntries[0]="new-entry"
+ if _,err=Project(a,changed);!errors.Is(err,ErrMigration){t.Fatal(err)}
+ d.Inject("after");_,_ = a.Apply(Command{"uncertain",DP{"13":65}})
+ offline,err:=Project(a,plan.After);if err!=nil||offline.State!=nil||offline.Identity!=before.Identity{t.Fatal("false availability or changed identity")}
 }
 func BenchmarkSimulatedCommandReadback(b *testing.B) {
  a,_:=ready(b)
