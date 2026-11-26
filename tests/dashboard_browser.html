@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'">
+<title>Venta synthetic browser regression</title>
+</head>
+<body data-result="PENDING">
+<div id="fixture" style="width:320px"></div>
+<pre id="log"></pre>
+<script src="../extras/dashboard/venta-airwasher-card.js"></script>
+<script>
+(async () => {
+  const log = document.querySelector("#log");
+  const check = (condition, message) => {
+    if (!condition) throw Error(message);
+    log.textContent += "PASS " + message + "\n";
+  };
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+  const fixture = document.querySelector("#fixture");
+  const card = document.createElement("venta-airwasher-card");
+  fixture.append(card);
+  const q = selector => card.shadowRoot.querySelector(selector);
+  const ui = key => q('[data-ui="' + key + '"]');
+  const calls = [];
+  const main = "humidifier.ci_venta";
+  const legacy = "select.venta_aw730_fan_speed";
+  const fan = "select.ci_fan", color = "select.ci_color", brightness = "select.ci_brightness", led = "switch.ci_led";
+  const humidity = "sensor.ci_humidity", temperature = "sensor.ci_temperature", pm = "sensor.ci_pm", water = "sensor.ci_water";
+  const state = (s, attributes={}) => ({state:s,attributes});
+  const original = {
+    [main]:state("on",{humidity:55,current_humidity:44,mode:"Auto",available_modes:["Auto","Manual"],min_humidity:30,max_humidity:70}),
+    [legacy]:state("2",{options:["1","2","3","4","5"]}),
+    [fan]:state("2",{options:["1","2","3"]}),
+    [color]:state("blue",{options:["blue","green"]}),
+    [brightness]:state("4",{options:["1","2","3","4","5","6","7","8"]}),
+    [led]:state("on"),
+    [humidity]:state("43",{unit_of_measurement:"%"}),
+    [temperature]:state("72",{unit_of_measurement:"°F"}),
+    [pm]:state("11",{unit_of_measurement:"µg/m³"}),
+    [water]:state("25",{unit_of_measurement:"%"}),
+  };
+  const services = {humidifier:{turn_on:{},turn_off:{},set_humidity:{},set_mode:{}},select:{select_option:{}},switch:{turn_on:{},turn_off:{}}};
+  let pending = null, reject = false;
+  const hass = (states=original, svc=services) => ({states,services:svc,callService:async (domain,service,data)=>{
+    calls.push({domain,service,data});
+    if (reject) throw Error("PRIVATE backend diagnostic");
+    if (pending) await pending.promise;
+  }});
+  card.setConfig({entity:main});
+  card.hass=hass();
+  check(q('[data-fan="2"]').disabled, "nonlegacy entity has no implicit legacy helper");
+  check(ui("humidity").textContent==="44", "real humidifier attribute fallback");
+  check(ui("pm25-tile").hidden && ui("water-tile").hidden, "unconfigured optional sensors hidden");
+  const config = {entity:main,fan,led,led_color:color,led_brightness:brightness,humidity,temperature,pm25:pm,water_level:water};
+  card.setConfig(config);
+  check(ui("humidity").textContent==="43" && ui("temperature-unit").textContent==="°F", "actual metrics and units");
+  check(ui("pm25").textContent==="11" && ui("water").textContent==="25", "optional metrics actual values");
+  check(!q('[data-fan="3"]').disabled && q('[data-fan="4"]').disabled && q('[data-mode="Sleep"]').disabled, "unsupported choices disabled");
+  check(q('[data-fan="2"]').getAttribute("aria-pressed")==="true", "active selection exposed accessibly");
+  check(q('[data-color="blue"]').getAttribute("aria-label").includes("blue"), "color has text alternative");
+  const width = () => q("ha-card").getBoundingClientRect().width;
+  check(width()<=320 && getComputedStyle(q(".adjustments")).gridTemplateColumns.split(" ").length===1, "320px mobile layout no side-by-side overflow");
+  fixture.style.width="700px";
+  check(width()<=700 && getComputedStyle(q(".adjustments")).gridTemplateColumns.split(" ").length===2, "700px desktop layout");
+  q('[data-action="power"]').focus();
+  check(card.shadowRoot.activeElement===q('[data-action="power"]'), "keyboard focusable native button");
+  q('[data-fan="3"]').click(); await settle();
+  check(calls.length===1 && calls[0].data.entity_id===fan && calls[0].data.option==="3", "fan dispatch exact configured entity");
+  check(q('[data-fan="2"]').getAttribute("aria-pressed")==="true", "no optimistic state mutation");
+  const target=q('[data-action="target"]');
+  target.value="60"; target.dispatchEvent(new Event("change")); await settle();
+  check(calls.length===2 && calls[1].service==="set_humidity" && calls[1].data.humidity===60, "target humidity dispatch");
+  const before=calls.length;
+  await card._call("select","select_option",{entity_id:legacy,option:"3"});
+  await card._call("humidifier","set_mode",{entity_id:main,mode:"Sleep"});
+  await card._call("humidifier","set_humidity",{entity_id:main,humidity:71});
+  check(calls.length===before,"wrong device, unsupported mode and out of range commands rejected");
+  card.hass=hass({...original,[main]:state("unavailable")});
+  check(target.disabled && q('[data-action="led"]').disabled && q('[data-fan="2"]').disabled, "all commands disabled offline");
+  target.dispatchEvent(new Event("change"));
+  await card._call("select","select_option",{entity_id:fan,option:"1"});
+  check(calls.length===before, "offline synthetic events cannot dispatch");
+  card.hass=hass({...original,[pm]:state("unavailable"),[water]:state("unknown")});
+  check(ui("pm25").textContent==="—" && ui("water").textContent==="—", "missing readings are not invented");
+  card.hass=hass(original,{...services,select:{}});
+  check(q('[data-fan="2"]').disabled, "missing service disabled");
+  card.hass=hass();
+  let release; pending={promise:new Promise(resolve=>{release=resolve;})};
+  q('[data-action="power"]').click();
+  check(q('[data-action="power"]').disabled && target.disabled, "controls disabled during command");
+  await card._call("humidifier","turn_off",{entity_id:main});
+  check(calls.length===before+1,"duplicate dispatch rejected");
+  release(); pending=null; await settle();
+  reject=true;
+  q('[data-action="power"]').click(); await settle(); reject=false;
+  check(ui("message").textContent.includes("Команда не выполнена") && !ui("message").textContent.includes("PRIVATE"),"error shown without backend details");
+  let invalid=false;
+  try {card.setConfig({...config,fan:"switch.ci_led"});} catch {invalid=true;}
+  check(invalid,"wrong-domain mapping rejected");
+  card.setConfig({entity:main,fan:null});
+  check(q('[data-fan="2"]').disabled,"explicit null disables role");
+  document.body.dataset.result="PASS";
+})().catch(error => {
+  document.querySelector("#log").textContent += "FAIL " + String(error);
+  document.body.dataset.result="FAIL";
+});
+</script>
+</body>
+</html>

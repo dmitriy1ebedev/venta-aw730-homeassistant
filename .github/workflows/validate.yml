@@ -35,6 +35,25 @@ jobs:
         run: |
           node --input-type=module --check < extras/dashboard/venta-airwasher-card.js
           node --input-type=module --check < extras/dashboard/venta-more-info.js
+      - name: Exercise dashboard in real Chromium
+        if: ${{ github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/venta-browser-fixture/tests" "$RUNNER_TEMP/venta-browser-fixture/extras/dashboard"
+          cp tests/dashboard_browser.html "$RUNNER_TEMP/venta-browser-fixture/tests/"
+          cp extras/dashboard/venta-airwasher-card.js "$RUNNER_TEMP/venta-browser-fixture/extras/dashboard/"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$RUNNER_TEMP/venta-browser-fixture" > "$RUNNER_TEMP/venta-dashboard-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --silent http://127.0.0.1:8765/tests/dashboard_browser.html > /dev/null; then break; fi
+            sleep 1
+          done
+          timeout 45s google-chrome --headless --disable-gpu --disable-dev-shm-usage --no-first-run --disable-background-networking --disable-component-update \
+            --user-data-dir="$RUNNER_TEMP/venta-dashboard-chrome" --window-size=1100,900 --virtual-time-budget=5000 --dump-dom \
+            http://127.0.0.1:8765/tests/dashboard_browser.html > "$RUNNER_TEMP/venta-dashboard-result.html"
+          cat "$RUNNER_TEMP/venta-dashboard-result.html"
+          grep -F 'data-result="PASS"' "$RUNNER_TEMP/venta-dashboard-result.html"
 
   hacs:
     name: HACS / Marketplace validation

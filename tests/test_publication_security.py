@@ -46,6 +46,10 @@ class PublicationScannerTests(unittest.TestCase):
         name = self.fake("example.py", b"token = 'sk-proj-" + b"A" * 36 + b"'")
         self.assertEqual(len(scanner.scan_paths(self.root, [name])), 1)
 
+    def test_html_fixture_is_scanned_for_secrets(self):
+        name = self.fake("tests/browser.html", b"<script>const example = \"ghp_" + b"A" * 36 + b"\";</script>")
+        self.assertIn("Credential-like content", scanner.scan_paths(self.root, [name])[0])
+
     def test_hidden_ha_storage_and_secret_files_rejected(self):
         for name in (
             ".storage/core.config_entries",
