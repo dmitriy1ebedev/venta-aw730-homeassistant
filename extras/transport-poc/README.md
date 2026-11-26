@@ -1,7 +1,7 @@
 # Offline transport contract (V200-02/03)
 
 This Go standard-library-only prototype has no executable, network transport,
-credential storage or HA imports. It is a simulated DP adapter and migration
+credential storage or HA imports. It is an offline simulation of a DP adapter and migration
 contract, not an implementation of Tuya LAN cryptography or a replacement for
 LocalTuya. Only the fixed public synthetic fixture is accepted for migration.
 Unknown write outcomes require a fresh snapshot; command IDs are never replayed
