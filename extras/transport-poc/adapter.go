@@ -82,6 +82,10 @@ func (d *FakeDevice) Writes() int {
  d.mu.Lock(); defer d.mu.Unlock()
  return d.writes
 }
+func (d *FakeDevice) sessionCurrent(epoch uint64) bool {
+ d.mu.Lock(); defer d.mu.Unlock()
+ return d.online && d.epoch==epoch
+}
 func (d *FakeDevice) connect() (Frame,error) {
  d.mu.Lock(); defer d.mu.Unlock()
  d.epoch++
@@ -144,7 +148,10 @@ func (a *Adapter) Reconnect() error {
 }
 func (a *Adapter) State() (DP,bool) {
  a.mu.Lock();defer a.mu.Unlock()
- if !a.ready {return nil,false}
+ if !a.ready || !a.device.sessionCurrent(a.epoch) {
+  a.invalidate()
+  return nil,false
+ }
  return clone(a.state),true
 }
 func (a *Adapter) invalidate() {
@@ -162,7 +169,10 @@ func (a *Adapter) Apply(c Command) (Result,error) {
  raw,err:=json.Marshal(c.Values)
  if err!=nil{return Result{},ErrInvalid}
  if _,exists:=a.used[c.ID];exists{return Result{},ErrConflict}
- if !a.ready {return Result{},ErrOffline}
+ if !a.ready || !a.device.sessionCurrent(a.epoch) {
+  a.invalidate()
+  return Result{},ErrOffline
+ }
  if _,ok:=c.Values["105"];ok {
   mode:=a.state["24"]
   if requested,exists:=c.Values["24"];exists {mode=requested}

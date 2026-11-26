@@ -74,6 +74,32 @@ single-writer device comparison with measured p50/p95 confirmation/reconnect
 latency, error rate, CPU/RAM and preserved identities. No release 2.0 merely
 to satisfy a version number.
 
+## Measured evidence and decision boundary (V200-04)
+
+GitHub Actions run 45767945176, job 139733316459, Go 1.26.11 linux/amd64:
+253 Python tests, eight Go tests and five injected-fault subtests passed;
+Go vet and race checks passed. The original in-memory readback benchmark
+measured 69,072 operations at 1,657 ns/op (1,614 B/op, 15 allocations/op),
+and reconnect 190,044 operations at 581.2 ns/op (672 B/op, 4 allocations/op).
+This measures the initial simulation before the additional state-projection
+check, not real LAN transport. Reproduction commands are in the prototype README.
+
+| Comparison dimension | Existing LocalTuya | Go simulation | Evidence-based conclusion |
+|---|---|---|---|
+| Stability | Previously observed working AW730; current physical error rate unknown | Five injected write faults, reconnect and stale-writer tests | No comparative hardware reliability benefit established |
+| Command latency | Real confirmation p50/p95 not measured | In-memory ns/op only | Not comparable to LAN latency; no speedup claim |
+| Maintenance | Existing tested HA integrations and release checks | Adds a real client, authentication, migration and HA adapter if deployed | Additional maintenance burden, no proven savings |
+| Locality | Existing local Tuya LAN path | No network at all; not a functional LAN client | No demonstrated locality gain |
+| Update and identity risk | Existing compatibility history, entity IDs and pairing | Synthetic migration projection and rollback preserve fixture identities only | No proven production migration or pairing equivalence |
+
+**Final decision: NO-GO for 2.0 production transport.** Keep LocalTuya; no
+new network connection, credential store, MQTT route or 2.0 release. The
+simulator and synthetic migration contract are research deliverables, not
+an installable alternative. Any future reconsideration needs comparable
+measurements on an approved single-writer real device and a separately
+approved migration rehearsal. No missing measurement is substituted by a
+simulation result.
+
 ## Reproducible research sources
 
 - LocalTuya 2026.10.0, protocol list:
