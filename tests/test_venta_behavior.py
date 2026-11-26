@@ -207,6 +207,46 @@ class VentaCommandBehaviorTests(unittest.IsolatedAsyncioTestCase):
             await self.accessory._venta_apply_fan({"RotationSpeed": 60})
             self.assertEqual(self.hass.services.calls, [])
 
+    async def test_fan_poweroff_is_blocked_when_device_not_ready(self):
+        for state in ("unknown", "unavailable", "unexpected"):
+            self.hass.states[self.entity] = FakeState(state, mode="Manual")
+            for command in ({"Active": 0}, {"RotationSpeed": 0}, {"Active": 1}):
+                await self.accessory._venta_apply_fan(command)
+            await self.accessory._venta_apply_target(0)
+        self.hass.states.pop(self.entity)
+        await self.accessory._venta_apply_fan({"Active": 0})
+        self.assertEqual(self.hass.services.calls, [])
+
+    async def test_invalid_fan_values_do_not_power_on_or_partially_dispatch(self):
+        self.hass.states[self.entity] = FakeState("off", mode="Manual")
+        for bad in (float("nan"), float("inf"), -1, 101, None, "invalid", True, []):
+            await self.accessory._venta_apply_fan({"Active": 1, "RotationSpeed": bad})
+        for bad in (2, .5, "invalid", None, float("nan")):
+            await self.accessory._venta_apply_fan({"RotationSpeed": 40, "TargetFanState": bad})
+            await self.accessory._venta_apply_fan({"RotationSpeed": 40, "Active": bad})
+            await self.accessory._venta_apply_target(bad)
+        await self.accessory._venta_apply_fan({})
+        self.assertEqual(self.hass.services.calls, [])
+
+    async def test_explicit_auto_does_not_send_conflicting_manual_speed(self):
+        await self.accessory._venta_apply_fan({"TargetFanState": 1, "RotationSpeed": 80})
+        self.assert_services(("humidifier", "set_mode"))
+        self.assertEqual(self.hass.services.calls[-1][2]["mode"], "Auto")
+        self.hass.services.calls.clear()
+        await self.accessory._venta_apply_fan({"TargetFanState": 0, "RotationSpeed": 80})
+        self.assert_services(("humidifier", "set_mode"), ("select", "select_option"))
+        self.assertEqual(self.hass.services.calls[-1][2]["option"], "4")
+
+    async def test_invalid_led_and_auto_values_do_not_partially_dispatch(self):
+        for bad in (float("nan"), float("inf"), -1, 101, None, "invalid", True):
+            self.accessory._venta_set_led({"On": True, "Brightness": bad})
+        for bad in (2, .5, None, "invalid"):
+            self.accessory._venta_set_led({"On": bad, "Brightness": 50})
+            self.accessory._venta_set_auto({"On": bad})
+        await self.hass.complete()
+        self.assertEqual(self.accessory.calls, [])
+        self.assertEqual(self.hass.services.calls, [])
+
     async def test_auto_off_returns_to_manual_only_when_running(self):
         self.hass.states[self.entity] = FakeState("on", mode="Auto")
         await self.accessory._venta_apply_auto_toggle(False)
