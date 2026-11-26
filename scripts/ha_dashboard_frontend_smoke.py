@@ -247,6 +247,12 @@ def browser_test(base, chrome):
     else:
         raise AssertionError("real recorder did not return both readings for every sensor")
     print("PASS: real local recorder history for four sensors", flush=True)
+    # First establish that the synthetic service actually writes and reads back.
+    for service, expected in (("turn_off", "off"), ("turn_on", "on")):
+        request(base, "/api/services/humidifier/" + service, {"entity_id": ENTITY}, auth)
+        if request(base, "/api/states/" + ENTITY, auth=auth)["state"] != expected:
+            raise AssertionError("synthetic REST service readback failed: " + service)
+    print("PASS: synthetic HA REST service readback", flush=True)
     with sync_playwright() as pw:
         browser = pw.chromium.launch(executable_path=chrome, headless=True, args=[
             "--disable-background-networking", "--disable-component-update",
@@ -261,6 +267,25 @@ def browser_test(base, chrome):
                     context.route_web_socket("**/*", lambda route: route.connect_to_server() if route.url == base.replace("http://", "ws://") + "/api/websocket" else route.close())
                     context.add_init_script("localStorage.setItem('hassTokens', " + json.dumps(json.dumps(tokens)) + ");")
                     page = context.new_page()
+                    calls = {}
+                    def inspect_sent(payload):
+                        try:
+                            msg = json.loads(payload)
+                            if msg.get("type") == "call_service" and msg.get("domain") in ("humidifier", "select", "switch"):
+                                calls[msg["id"]] = [msg.get("domain"), msg.get("service"), "pending"]
+                        except (TypeError, ValueError, AttributeError, KeyError):
+                            pass
+                    def inspect_received(payload):
+                        try:
+                            msg = json.loads(payload)
+                            if msg.get("type") == "result" and msg.get("id") in calls:
+                                calls[msg["id"]][2] = "success" if msg.get("success") else "error"
+                        except (TypeError, ValueError, AttributeError):
+                            pass
+                    def inspect_ws(ws):
+                        ws.on("framesent", inspect_sent)
+                        ws.on("framereceived", inspect_received)
+                    page.on("websocket", inspect_ws)
                     page.goto(base + "/venta-ci/main", wait_until="domcontentloaded", timeout=45000)
                     card = page.locator("venta-airwasher-card")
                     expect(card).to_be_visible(timeout=60000)
@@ -274,12 +299,32 @@ def browser_test(base, chrome):
                     expect(power).to_have_attribute("aria-label", "Питание")
                     if power.bounding_box()["height"] < 44:
                         raise AssertionError("power target too small")
+                    def check_power(expected, action):
+                        try:
+                            expect(power).to_have_attribute("aria-pressed", "true" if expected == "on" else "false", timeout=15000)
+                        except AssertionError:
+                            state = request(base, "/api/states/" + ENTITY, auth=auth)["state"]
+                            message = card.locator('[data-ui="message"]').inner_text()
+                            print(f"Power diagnostic {action}: backend={state}; card={message}; calls={list(calls.values())}", flush=True)
+                            raise
+                        if request(base, "/api/states/" + ENTITY, auth=auth)["state"] != expected:
+                            raise AssertionError("browser power did not read back from HA")
+                    power.tap() if mobile else power.click()
+                    check_power("off", "pointer")
+                    expect(power).to_be_enabled(timeout=15000)
+                    power.tap() if mobile else power.click()
+                    check_power("on", "pointer")
                     if not mobile:
+                        expect(power).to_be_enabled(timeout=15000)
                         power.focus()
-                        power.press("Space")
-                        expect(power).to_have_attribute("aria-pressed", "false", timeout=15000)
-                        power.press("Space")
-                        expect(power).to_have_attribute("aria-pressed", "true", timeout=15000)
+                        if not power.evaluate("el => el.getRootNode().activeElement === el"):
+                            raise AssertionError("native button did not receive keyboard focus")
+                        page.keyboard.press("Space")
+                        check_power("off", "Space")
+                        expect(power).to_be_enabled(timeout=15000)
+                        power.focus()
+                        page.keyboard.press("Enter")
+                        check_power("on", "Enter")
                     auto = card.locator('[data-mode="Auto"]')
                     auto.tap() if mobile else auto.click()
                     expect(card.locator('[data-mode="Auto"]')).to_have_attribute("aria-pressed", "true", timeout=15000)
