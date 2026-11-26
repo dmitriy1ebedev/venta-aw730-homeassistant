@@ -130,9 +130,8 @@ class ServiceAdvisoryMonitor:
         """
         humidifier = self.hass.states.get(self.humidifier_entity)
         humidifier_state = getattr(humidifier, "state", None)
-        available = isinstance(humidifier_state, str) and humidifier_state not in (
-            "unknown", "unavailable"
-        )
+        # A malformed or unexpected humidifier state is not trustworthy.
+        available = humidifier_state in ("on", "off")
         sample = sample_service_states(self.hass.states, self.sensor_entities)
         if changed_entity_id is None:
             # No notification on initial HA startup, even if the device is
