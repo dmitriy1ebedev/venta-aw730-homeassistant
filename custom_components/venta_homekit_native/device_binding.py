@@ -1,4 +1,4 @@
-"""Read-only source identity contract for the Venta logical device (P06).
+"""Source identity and scoped registration for the Venta logical device (P06).
 
 The source remains owned by LocalTuya. Never add our config entry to its
 DeviceEntry, move its entities, or copy its physical identifiers/connections.

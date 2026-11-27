@@ -628,6 +628,7 @@ def _setup_logical_device(hass: HomeAssistant, entry, entity_id: str) -> None:
     """Card registration is isolated from the working HomeKit accessory."""
     active = hass.data[DOMAIN]
     active.pop("native_device", None)
+    active.pop("native_control", None)
     if getattr(entry, "domain", None) != DOMAIN:
         return
     from .device_binding import BindingError, register_logical_device
@@ -640,6 +641,26 @@ def _setup_logical_device(hass: HomeAssistant, entry, entity_id: str) -> None:
         _LOGGER.warning("Venta: native device registration unavailable; existing bridge retained")
         return
     active["native_device"] = {"identity": identity, "device_id": device_id}
+    # The control adapter is prepared separately; no platforms or new exports
+    # are activated until the native UI export-review gate is implemented.
+    from .native_control import ControlError, NativeControl
+
+    roles = {role: entry.data.get(f"{role}_entity") for role in (
+        "humidifier", "fan", "led", "brightness", "temperature", "humidity",
+    )}
+    expected_roles = entry.data.get("native_role_identities")
+    try:
+        controller = NativeControl(hass, identity, roles, expected_roles=expected_roles)
+        if expected_roles is None:
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, "native_role_identities": controller.role_identities.copy()},
+            )
+            if entry.data.get("native_role_identities") != controller.role_identities:
+                raise ControlError("role_pin_not_saved")
+    except (ControlError, HomeAssistantError, AttributeError, RuntimeError, TypeError, ValueError):
+        _LOGGER.warning("Venta: native controls unavailable; existing bridge retained")
+        return
+    active["native_control"] = controller
 
 
 async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
@@ -657,6 +678,7 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     values = dict(entry.data)
     # Registry identity is metadata, not part of the existing HAP mapping.
     values.pop("native_device_identity", None)
+    values.pop("native_role_identities", None)
     # Service advisories are an explicit UI option, staged without a live
     # HomeKit reload. Revalidate registry ownership at the next safe setup.
     advisory_options = getattr(entry, "options", {}).get("service_advisory_entities")
