@@ -255,5 +255,24 @@ class NativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.calls)
 
 
+    def test_explicit_reconfigure_repins_only_changed_roles(self):
+        current = {role + "_entity": entity_id for role, entity_id in self.roles.items()}
+        current.update(native_device_identity=self.identity,
+                       native_role_identities=self.controller.role_identities.copy())
+        new_id = "switch.fixture_led_replacement"
+        self.rows[new_id] = NS(**vars(self.rows[self.roles["led"]]))
+        self.rows[new_id].entity_id = new_id
+        self.rows[new_id].unique_id = "explicit-replacement"
+        proposed = {**current, "led_entity": new_id}
+        pins = native.review_role_change(self.hass, current, proposed)["native_role_identities"]
+        self.assertNotEqual(pins["led"], current["native_role_identities"]["led"])
+        for role in set(self.roles) - {"led"}:
+            self.assertEqual(pins[role], current["native_role_identities"][role])
+        self.rows[self.roles["fan"]].unique_id = "silent-replacement"
+        with self.assertRaisesRegex(native.ControlError, "role_identity_changed"):
+            native.review_role_change(self.hass, current, proposed)
+        self.assertFalse(self.calls)
+
+
 if __name__ == "__main__":
     unittest.main()

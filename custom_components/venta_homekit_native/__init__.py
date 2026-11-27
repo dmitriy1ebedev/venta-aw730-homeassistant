@@ -684,6 +684,7 @@ async def _setup_native_platforms(hass: HomeAssistant, entry) -> None:
     from homeassistant.const import Platform
     from homeassistant.exceptions import HomeAssistantError
     from .export_guard import export_blockers
+    from homeassistant.helpers import entity_registry as er
 
     platforms = [Platform.HUMIDIFIER, Platform.FAN, Platform.LIGHT, Platform.SENSOR]
     try:
@@ -692,6 +693,20 @@ async def _setup_native_platforms(hass: HomeAssistant, entry) -> None:
             return
         active["native_ui_enabled"] = True
         await hass.config_entries.async_forward_entry_setups(entry, platforms)
+        # HA may log and absorb forwarded platform errors. Verify the actual
+        # registered entities rather than treating a returned coroutine as proof.
+        suffixes = {"native_humidifier", "native_fan", "native_led"}
+        sensors = active.get("native_sensors")
+        if sensors is not None:
+            suffixes.update("native_" + role for role in ("temperature", "humidity", *sensors.roles))
+        identity = active["native_device"]["identity"]
+        expected = {identity + "-" + suffix for suffix in suffixes}
+        registry = er.async_get(hass)
+        ready = {row.unique_id for row in er.async_entries_for_config_entry(registry, entry.entry_id)
+                 if row.platform == DOMAIN and row.device_id == active["native_device"]["device_id"]
+                 and (row.disabled_by is not None or hass.states.get(row.entity_id) is not None)}
+        if not expected.issubset(ready):
+            raise HomeAssistantError("Venta native platform registration incomplete")
     except (HomeAssistantError, AttributeError, RuntimeError, TypeError, ValueError):
         active["native_ui_enabled"] = False
         _LOGGER.warning("Venta: native UI setup failed; existing bridge retained")

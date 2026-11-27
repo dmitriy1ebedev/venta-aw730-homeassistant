@@ -137,6 +137,13 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
                         raise ControlError("duplicate_sensor")
                     sensor_pins = {role: sensor_fingerprint(source, registry.async_get(entity_id), role, identity)
                                    for role, entity_id in native_sensors.items()}
+                    previous_pins = entry.options.get("native_sensor_pins", {})
+                    if not isinstance(previous_pins, dict) or any(
+                        stored_native_sensors.get(role) == native_sensors[role]
+                        and role in previous_pins and previous_pins[role] != pin
+                        for role, pin in sensor_pins.items()
+                    ):
+                        raise ControlError("sensor_identity_changed")
                 except (BindingError, ControlError, AttributeError, RuntimeError, TypeError, ValueError):
                     errors["base"] = "native_sensor_review_required"
             if not errors and proposal is not None:

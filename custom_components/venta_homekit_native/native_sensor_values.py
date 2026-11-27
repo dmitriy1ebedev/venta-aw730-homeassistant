@@ -50,6 +50,8 @@ def sample_value(role, state):
         elif unit == "K":
             value -= 273.15
         unit = units[0]
+        if not isfinite(value):
+            return None
     # HA's canonical PM2.5 unit uses the micro sign; the Greek-mu spelling
     # is dimensionally identical and occurs in the bundled LocalTuya template.
     if role == "pm25":

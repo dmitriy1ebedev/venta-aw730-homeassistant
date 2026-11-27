@@ -243,3 +243,31 @@ class NativeControl:
                     "brightness", "select", "select_option", {"option": level},
                     lambda state: state.state == level, context,
                 )
+
+
+def review_role_change(hass, current, proposed):
+    """Repin only deliberately changed role IDs for the next safe restart.
+
+    The physical source pin and every unchanged role must match the existing
+    identities. A replacement under an unchanged entity ID is not a review.
+    """
+    identity = current.get("native_device_identity")
+    previous = current.get("native_role_identities")
+    if identity is None and previous is None:
+        return {}
+    if not isinstance(identity, str) or (previous is not None and (
+        not isinstance(previous, dict) or set(previous) != set(DOMAINS)
+    )):
+        raise ControlError("role_pin_invalid")
+    if proposed.get("humidifier_entity") != current.get("humidifier_entity"):
+        raise ControlError("source_identity_changed")
+    roles = {role: proposed.get(role + "_entity") for role in DOMAINS}
+    controller = NativeControl(hass, identity, roles)
+    if previous is not None:
+        for role, pin in controller.role_identities.items():
+            field = role + "_entity"
+            if proposed.get(field) == current.get(field) and previous[role] != pin:
+                raise ControlError("role_identity_changed")
+    return {"native_role_identities": controller.role_identities.copy()}
+
+

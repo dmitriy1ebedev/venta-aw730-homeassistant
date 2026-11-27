@@ -384,12 +384,18 @@ class VentaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 active = self.hass.data.get(DOMAIN, {})
                 if active.get("patched") and active.get("config_entry_id") != entry.entry_id:
                     return self.async_abort(reason="yaml_or_other_owner")
+                from .native_control import ControlError, review_role_change
+
+                try:
+                    native_pins = review_role_change(self.hass, current, {**current, **refreshed})
+                except (ControlError, AttributeError, RuntimeError, TypeError, ValueError):
+                    return self.async_abort(reason="staged_entities_changed")
                 new_options = dict(options)
                 new_options.pop(PROPOSAL, None)
                 new_options.pop(SOURCE_SNAPSHOT, None)
                 self.hass.config_entries.async_update_entry(
                     entry,
-                    data={**current, **refreshed},
+                    data={**current, **refreshed, **native_pins},
                     options=new_options,
                 )
                 return self.async_abort(reason="restart_required_for_reconfigure")

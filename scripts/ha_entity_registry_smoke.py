@@ -232,7 +232,7 @@ def validate_native_platforms(config: Path) -> dict:
     import tempfile
     from datetime import datetime, timezone
 
-    from homeassistant import bootstrap, config_entries, loader, setup
+    from homeassistant import auth, bootstrap, config_entries, loader, setup
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -254,6 +254,7 @@ def validate_native_platforms(config: Path) -> dict:
         hass.config_entries = config_entries.ConfigEntries(hass, {})
         await loader.async_get_custom_components(hass)
         assert await bootstrap.async_load_base_functionality(hass)
+        hass.auth = await auth.auth_manager_from_config(hass, [], [])
         devices, registry = dr.async_get(hass), er.async_get(hass)
         source = hass.config_entries.async_get_entry("ci-localtuya")
         entry = hass.config_entries.async_get_entry("ci-venta")
@@ -337,7 +338,7 @@ def validate_native_platforms(config: Path) -> dict:
                            for row in er.async_entries_for_config_entry(registry, entry.entry_id)}
             expected = {"native_humidifier", "native_fan", "native_led",
                         *("native_" + role for role in ("temperature", "humidity", *configured))}
-            assert set(projections) == expected, "native entity roster mismatch"
+            assert set(projections) == expected, f"native entity roster mismatch: {sorted(projections)} != {sorted(expected)}"
             assert all(row.device_id == card.id for row in projections.values())
             assert all(registry.async_get(key) == row for key, row in original_registry.items())
 
