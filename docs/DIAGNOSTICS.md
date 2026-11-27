@@ -42,6 +42,7 @@ The output is a single JSON object with a **fixed schema**:
     "temperature": "available", "humidity": "available"
   },
   "homekit_bridge": "ready",
+  "native_ui": {"device_registered": false, "platforms_loaded": false, "control_status": "not_configured", "sensor_count": 0},
   "recommendation": "none",
   "protocol_error": "not_available_from_entity_state"
 }

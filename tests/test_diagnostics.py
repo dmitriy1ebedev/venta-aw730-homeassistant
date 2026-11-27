@@ -96,6 +96,19 @@ class DiagnosticsContractTests(unittest.TestCase):
         self.assertEqual(set(report["linked_entities"]), {"fan", "led", "brightness", "temperature", "humidity"})
         self.assert_redacted(report)
 
+    def test_native_ui_diagnostics_redacts_registry_and_blocks_export(self):
+        self.hass.data = {"venta_homekit_native": {
+            "native_device": {"device_id": "fixture_bridge_private_id"},
+            "native_ui_platforms_loaded": True,
+            "native_control": SimpleNamespace(admission=lambda: False),
+            "native_sensors": SimpleNamespace(roles={"pm25": "sensor.fixture_fan"}),
+        }}
+        report = self.collect()
+        self.assertEqual(report["native_ui"], {
+            "device_registered": True, "platforms_loaded": True,
+            "control_status": "review_exports", "sensor_count": 3})
+        self.assert_redacted(report)
+
     def test_documented_example_matches_actual_diagnostic_schema(self):
         document = (ROOT / "docs/DIAGNOSTICS.md").read_text()
         example = json.loads(document.split("```json\n", 1)[1].split("\n```", 1)[0])

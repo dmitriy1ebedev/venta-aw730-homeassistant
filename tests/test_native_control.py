@@ -100,6 +100,8 @@ class NativeControlTests(unittest.IsolatedAsyncioTestCase):
                 state.attributes["mode"] = data["mode"]
             elif service == "select_option":
                 state.state = data["option"]
+            elif service == "set_value":
+                state.state = str(data["value"])
             else:
                 raise AssertionError("Unexpected service")
             for callback in list(self.watchers.get(data["entity_id"], [])):
@@ -109,6 +111,35 @@ class NativeControlTests(unittest.IsolatedAsyncioTestCase):
 
     def names(self):
         return [(d, s) for d, s, _, _ in self.calls]
+
+    async def test_optional_controls_require_pins_and_validate_values(self):
+        extras = {"led_color": "select.fixture_color", "hybrid": "switch.fixture_hybrid",
+                  "rh_offset": "number.fixture_offset"}
+        pins = {}
+        for role, entity in extras.items():
+            self.rows[entity] = NS(entity_id=entity, unique_id="fixture-" + role,
+                                   platform="localtuya", config_entry_id="source-config",
+                                   device_id="source-device", disabled_by=None, hidden_by=None)
+            pins[role] = native._role_fingerprint(self.source, self.rows[entity], role, self.identity)
+        self.states[extras["led_color"]] = NS(state="purple", attributes={"options": list(native.COLORS)})
+        self.states[extras["hybrid"]] = NS(state="off", attributes={})
+        self.states[extras["rh_offset"]] = NS(state="0", attributes={"min": -10, "max": 10,
+                                                   "step": 1, "unit_of_measurement": "%"})
+        self.controller.configure_extras(extras, {})
+        self.assertEqual(self.controller.extra_roles, {})
+        self.controller.configure_extras(extras, pins)
+        await self.controller.set_extra("led_color", "AQI")
+        await self.controller.set_extra("hybrid", True)
+        await self.controller.set_extra("rh_offset", -3)
+        self.assertEqual(self.controller.extra_value("rh_offset"), -3)
+        self.assertEqual(self.names(), [("select", "select_option"), ("switch", "turn_on"), ("number", "set_value")])
+        self.states[extras["rh_offset"]].attributes["max"] = 20
+        with self.assertRaises(native.ControlError):
+            await self.controller.set_extra("rh_offset", 1)
+        self.rows[extras["hybrid"]].unique_id = "replacement"
+        with self.assertRaises(native.ControlError):
+            await self.controller.set_extra("hybrid", False)
+        self.assertEqual(len(self.calls), 3)
 
     async def test_export_change_stops_multistep_command(self):
         allowed = True

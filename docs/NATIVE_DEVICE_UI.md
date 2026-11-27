@@ -23,8 +23,14 @@ Temperature and RH come from the already confirmed source roles. Optional
 PM2.5, water level and filter/cleaning/service intervals require an explicit
 mapping in Options. Numeric values and units are checked, unavailable or
 invalid data is not displayed as zero. Temperature is normalized to Celsius
-before HA's normal unit conversion. No reset button is created. The existing
+before HA's normal unit conversion. Explicit optional LocalTuya mappings also expose LED color (eight choices),
+hybrid mode and RH correction (-10 to +10%, step 1). Each requires an
+identity pin and the expected runtime options/range before writes.
+No reset button is created. The existing
 opt-in service-advisory monitor is not duplicated.
+
+The diagnostics service reports bounded native device/platform status and
+configured sensor count without registry IDs or raw values.
 
 ## Safe activation and rollback
 
@@ -71,11 +77,11 @@ LocalTuya остаётся транспортом. В настройках Venta
 Неподтверждённые счётчики и PM2.5 не угадываются, сбросы не выполняются.
 
 CI uses only isolated Home Assistant and synthetic source state. The actual
-HA platform smoke registers ten native entities, exercises the native HA
+HA platform smoke registers thirteen native entities, exercises the native HA
 service registry and checks the simulated LocalTuya readback. A separate
 stock frontend gate replays that successful run's synthetic device/entity
 registry and state snapshot in a clean HA instance with inert integration
 stubs, then navigates from the standard integration page to its device card
-at 1280 px and 390 px. It verifies all ten entity rows and viewport bounds.
+at 1280 px and 390 px. It verifies all thirteen entity rows and viewport bounds.
 This is stock UI rendering evidence, not a browser-to-hardware command test.
 The live cutover and physical readback remain separate gates.

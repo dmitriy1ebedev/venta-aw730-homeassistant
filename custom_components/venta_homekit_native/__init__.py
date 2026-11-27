@@ -660,6 +660,11 @@ def _setup_logical_device(hass: HomeAssistant, entry, entity_id: str) -> None:
     except (ControlError, HomeAssistantError, AttributeError, RuntimeError, TypeError, ValueError):
         _LOGGER.warning("Venta: native controls unavailable; existing bridge retained")
         return
+    try:
+        controller.configure_extras(entry.options.get("native_extra_entities", {}),
+                                    entry.options.get("native_extra_pins", {}))
+    except (ControlError, AttributeError, RuntimeError, TypeError, ValueError):
+        _LOGGER.warning("Venta: optional controls require review")
     active["native_control"] = controller
     from .native_sensor_values import NativeSensors
 
@@ -687,6 +692,9 @@ async def _setup_native_platforms(hass: HomeAssistant, entry) -> None:
     from homeassistant.helpers import entity_registry as er
 
     platforms = [Platform.HUMIDIFIER, Platform.FAN, Platform.LIGHT, Platform.SENSOR]
+    from .native_control import EXTRA_DOMAINS
+    extras = active["native_control"].extra_roles
+    platforms.extend(Platform(EXTRA_DOMAINS[role]) for role in extras)
     try:
         if export_blockers(hass, entry.entry_id):
             _LOGGER.warning("Venta: native UI requires review of HomeKit/Yaha exports")
@@ -708,6 +716,7 @@ async def _setup_native_platforms(hass: HomeAssistant, entry) -> None:
         # HA may log and absorb forwarded platform errors. Verify the actual
         # registered entities rather than treating a returned coroutine as proof.
         suffixes = {"native_humidifier", "native_fan", "native_led"}
+        suffixes.update("native_" + role for role in extras)
         sensors = active.get("native_sensors")
         if sensors is not None:
             suffixes.update("native_" + role for role in ("temperature", "humidity", *sensors.roles))

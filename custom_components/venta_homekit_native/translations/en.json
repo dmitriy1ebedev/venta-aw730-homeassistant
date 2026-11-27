@@ -91,7 +91,10 @@
           "confirm_service_monitoring": "I explicitly enable read-only service notifications after the next safe HA start",
           "native_device_ui": "Native Venta controls (after restart)",
           "confirm_native_device_ui": "I confirm HomeKit and Yandex export review",
-          "pm25_entity": "PM2.5 sensor — optional"
+          "pm25_entity": "PM2.5 sensor — optional",
+          "led_color_entity": "LED color — optional",
+          "hybrid_entity": "Hybrid mode — optional",
+          "rh_offset_entity": "Humidity correction — optional"
         }
       }
     },
@@ -171,6 +174,21 @@
       },
       "native_service_days": {
         "name": "Service interval"
+      }
+    },
+    "select": {
+      "native_led_color": {
+        "name": "LED color"
+      }
+    },
+    "switch": {
+      "native_hybrid": {
+        "name": "Hybrid mode"
+      }
+    },
+    "number": {
+      "native_rh_offset": {
+        "name": "Humidity correction"
       }
     }
   }

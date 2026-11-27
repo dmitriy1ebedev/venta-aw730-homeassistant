@@ -72,7 +72,7 @@ class VentaEntity(Entity):
             self.async_write_ha_state()
 
         self.async_on_remove(async_track_state_change_event(
-            self.hass, tuple(self.controller.roles.values()), changed,
+            self.hass, tuple((*self.controller.roles.values(), *self.controller.extra_roles.values())), changed,
         ))
 
         @callback
@@ -81,7 +81,7 @@ class VentaEntity(Entity):
             # Source changes and labels on any Venta projection can affect
             # the shared export admission of every entity.
             row = er.async_get(self.hass).async_get(entity_id) if entity_id else None
-            if entity_id in self.controller.roles.values() or (
+            if entity_id in (*self.controller.roles.values(), *self.controller.extra_roles.values()) or (
                     row is not None and row.platform == DOMAIN) or event.data.get("action") == "remove":
                 self.async_write_ha_state()
 

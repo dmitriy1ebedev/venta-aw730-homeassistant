@@ -65,6 +65,22 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
         stored_native_sensors = entry.options.get("native_sensor_entities", {})
         if not isinstance(stored_native_sensors, dict):
             stored_native_sensors = {}
+        from .native_control import EXTRA_DOMAINS, _role_fingerprint, ControlError
+        from .device_binding import BindingError, resolve_source
+        registry = er.async_get(self.hass)
+        source = registry.async_get(current.get(SOURCE))
+        extra_choices = {role: {"": "Disabled"} for role in EXTRA_DOMAINS}
+        if source is not None:
+            for row in getattr(registry, "entities", {}).values():
+                for role in EXTRA_DOMAINS:
+                    try:
+                        _role_fingerprint(source, row, role, "review")
+                    except ControlError:
+                        continue
+                    extra_choices[role][row.entity_id] = row.entity_id
+        stored_extras = entry.options.get("native_extra_entities", {})
+        if not isinstance(stored_extras, dict):
+            stored_extras = {}
         errors: dict[str, str] = {}
         if user_input is not None:
             native_ui = user_input.get("native_device_ui", entry.options.get("native_device_ui", False))
@@ -146,6 +162,29 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
                         raise ControlError("sensor_identity_changed")
                 except (BindingError, ControlError, AttributeError, RuntimeError, TypeError, ValueError):
                     errors["base"] = "native_sensor_review_required"
+            extras, extra_pins = {}, {}
+            if not errors and native_ui:
+                try:
+                    for role, choices in extra_choices.items():
+                        field = role + "_entity"
+                        selected = user_input.get(field, stored_extras.get(role, ""))
+                        if not isinstance(selected, str) or selected not in choices:
+                            errors[field] = "invalid_entity"
+                        elif selected:
+                            extras[role] = selected
+                    if (len(set(extras.values())) != len(extras) or set(extras.values()) &
+                            (set(selections.values()) | set(native_sensors.values()) | {current[SOURCE]})):
+                        raise ControlError("duplicate_extra_role")
+                    identity = resolve_source(self.hass, current[SOURCE], expected=current.get("native_device_identity"))
+                    extra_pins = {role: _role_fingerprint(source, registry.async_get(entity_id), role, identity)
+                                  for role, entity_id in extras.items()}
+                    previous = entry.options.get("native_extra_pins", {})
+                    if not isinstance(previous, dict) or any(
+                        stored_extras.get(role) == extras[role] and role in previous and previous[role] != pin
+                        for role, pin in extra_pins.items()):
+                        raise ControlError("extra_identity_changed")
+                except (BindingError, ControlError, AttributeError, RuntimeError, TypeError, ValueError):
+                    errors["base"] = "native_sensor_review_required"
             if not errors and proposal is not None:
                 options = dict(entry.options)
                 if mapping_changed(current, proposal):
@@ -163,10 +202,14 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
                     options["native_device_ui"] = True
                     options["native_sensor_entities"] = native_sensors
                     options["native_sensor_pins"] = sensor_pins
+                    options["native_extra_entities"] = extras
+                    options["native_extra_pins"] = extra_pins
                 else:
                     options.pop("native_device_ui", None)
                     options.pop("native_sensor_entities", None)
                     options.pop("native_sensor_pins", None)
+                    options.pop("native_extra_entities", None)
+                    options.pop("native_extra_pins", None)
                 return self.async_create_entry(title="", data=options)
 
         def required_choice(key: str, choices: Any) -> Any:
@@ -203,6 +246,8 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
             "": "Disabled",
             **{entity_id: entity_id for entity_id in available_service_sensors},
         })
+        for role, choices in extra_choices.items():
+            schema[vol.Optional(role + "_entity", default=stored_extras.get(role, ""))] = vol.In(choices)
         schema[vol.Required("confirm_staging", default=False)] = bool
         return self.async_show_form(
             step_id="init", data_schema=vol.Schema(schema), errors=errors,

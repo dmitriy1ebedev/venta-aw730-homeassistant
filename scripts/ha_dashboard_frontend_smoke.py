@@ -122,7 +122,7 @@ def stage_native_browser_fixture(root: Path, capture_path: Path):
     loaded; they cannot control a device or create a HomeKit pairing.
     """
     capture = json.loads(capture_path.read_text())
-    assert len(capture["entities"]) == 10
+    assert len(capture["entities"]) == 13
     assert {row["entry_id"] for row in capture["storage"]["core.config_entries"]["data"]["entries"]} == {
         "ci-localtuya", "ci-venta", "ci-homekit"}
     for name in ("core.device_registry", "core.entity_registry", "core.config_entries"):
@@ -293,7 +293,7 @@ def check_native_device_page(page, base, capture, width):
     # Later builds add role=listitem. Count actual active row wrappers in
     # either markup, not unavailable placeholders or registry metadata.
     rows = cards.locator("#entities > ha-list > div:not(.divider), #entities > ha-list-base > div[role=listitem]")
-    expect(rows).to_have_count(10, timeout=30000)
+    expect(rows).to_have_count(len(expected), timeout=30000)
     for row in rows.all():
         expect(row).to_be_visible(timeout=10000)
     assert cards.evaluate_all("(els) => els.every(el => el.entities.every(e => !!el.hass.states[e.entity_id] && !['unknown','unavailable'].includes(el.hass.states[e.entity_id].state)))"), "native device state missing"
@@ -301,7 +301,7 @@ def check_native_device_page(page, base, capture, width):
         bounds = card.bounding_box()
         if bounds is None or bounds["x"] < -1 or bounds["x"] + bounds["width"] > width + 1:
             raise AssertionError("stock HA device card overflows viewport")
-    print(f"PASS: stock integration/device UI {width}px, 10 registry-backed entities", flush=True)
+    print(f"PASS: stock integration/device UI {width}px, {len(expected)} registry-backed entities", flush=True)
 
 
 def browser_test(base, chrome, native_capture=None):

@@ -288,7 +288,10 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
                 "cleaning_days": ("sensor", "7", {"device_class": "duration", "unit_of_measurement": "d"}),
                 "service_days": ("sensor", "90", {"device_class": "duration", "unit_of_measurement": "d"}),
             }
-            for domain in ("humidifier", "fan", "light", "sensor", "switch", "select"):
+            from custom_components.venta_homekit_native.native_control import COLORS, EXTRA_DOMAINS, _role_fingerprint
+            specifications.update(led_color=("select", "purple", {"options": list(COLORS)}),
+                hybrid=("switch", "off", {}), rh_offset=("number", "0", {"min": -10, "max": 10, "step": 1, "unit_of_measurement": "%"}))
+            for domain in ("humidifier", "fan", "light", "sensor", "switch", "select", "number"):
                 assert await setup.async_setup_component(hass, domain, {})
             for role, (domain, state, attrs) in specifications.items():
                 row = registry.async_get_or_create(
@@ -309,13 +312,16 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
             hass.config_entries.async_update_entry(entry, data=values, options={"native_device_ui": True})
             from custom_components.venta_homekit_native.device_binding import resolve_source
             identity = resolve_source(hass, roles["humidifier"])
-            configured = {role: roles[role] for role in roles if role not in core_roles}
+            configured = {role: roles[role] for role in roles if role not in core_roles and role not in EXTRA_DOMAINS}
+            extras = {role: roles[role] for role in EXTRA_DOMAINS}
+            extra_pins = {role: _role_fingerprint(registry.async_get(roles["humidifier"]), registry.async_get(entity_id), role, identity)
+                          for role, entity_id in extras.items()}
             pins = {role: sensor_fingerprint(
                 registry.async_get(roles["humidifier"]), registry.async_get(entity_id), role, identity)
                 for role, entity_id in configured.items()}
             hass.config_entries.async_update_entry(entry, options={
                 "native_device_ui": True, "native_sensor_entities": configured,
-                "native_sensor_pins": pins,
+                "native_sensor_pins": pins, "native_extra_entities": extras, "native_extra_pins": extra_pins,
             })
 
             # HAP lifecycle has its own real-HA smoke. Stub only that legacy
@@ -344,7 +350,7 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
             projections = {row.unique_id.rsplit("-", 1)[-1]: row
                            for row in er.async_entries_for_config_entry(registry, entry.entry_id)}
             expected = {"native_humidifier", "native_fan", "native_led",
-                        *("native_" + role for role in ("temperature", "humidity", *configured))}
+                        *("native_" + role for role in ("temperature", "humidity", *configured, *extras))}
             assert set(projections) == expected, f"native entity roster mismatch: {sorted(projections)} != {sorted(expected)}"
             assert all(row.device_id == card.id for row in projections.values())
             assert all(registry.async_get(key) == row for key, row in original_registry.items())
@@ -389,6 +395,8 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
                         attrs["mode"] = service_data["mode"]
                     elif service == "select_option":
                         state = service_data["option"]
+                    elif service == "set_value":
+                        state = str(service_data["value"])
                     else:
                         raise AssertionError("unexpected synthetic source service")
                     hass.states.async_set(target, state, attrs, context=kwargs.get("context"))
@@ -413,6 +421,12 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
                 assert native_state("led").attributes["brightness"] == 255
                 await dispatch("led", "light", "turn_off")
                 assert native_state("led").state == "off"
+                await dispatch("led_color", "select", "select_option", option="AQI")
+                assert native_state("led_color").state == "AQI"
+                await dispatch("hybrid", "switch", "turn_on")
+                assert native_state("hybrid").state == "on"
+                await dispatch("rh_offset", "number", "set_value", value=-3)
+                assert float(native_state("rh_offset").state) == -3
                 before = len(calls)
                 # A live change in HomeKit export options must immediately
                 # make Venta projections unavailable, without changing the
@@ -426,8 +440,18 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
                     await dispatch("humidifier", "humidifier", "turn_off")
                 except HomeAssistantError:
                     pass
+                # HA may skip an unavailable entity without raising. The
+                # acceptance criterion is absence of delegated source I/O.
+                assert len(calls) == before, "unsafe export command dispatched"
+                assert hass.states.get(roles["humidifier"]).state == "on"
+                assert native_state("humidifier").state == "unavailable"
+                from custom_components.venta_homekit_native.native_control import ControlError
+                try:
+                    await active["native_control"].power(False)
+                except ControlError as exc:
+                    assert str(exc) == "export_review_required"
                 else:
-                    raise AssertionError("unsafe export command accepted")
+                    raise AssertionError("direct controller accepted unsafe export")
                 assert len(calls) == before
                 hass.config_entries.async_update_entry(bridge, options=safe_options)
                 await hass.async_block_till_done()
@@ -449,6 +473,9 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
                 ("led", "switch", "turn_on"),
                 ("brightness", "select", "select_option"),
                 ("led", "switch", "turn_off"),
+                ("led_color", "select", "select_option"),
+                ("hybrid", "switch", "turn_on"),
+                ("rh_offset", "number", "set_value"),
             ]
             return {"real_platform_entities": len(projections), "native_service_dispatch": True,
                     "source_registry_unchanged": True, "unavailable_propagates": True,
@@ -478,7 +505,7 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
                 for name in ("core.device_registry", "core.entity_registry", "core.config_entries")}
             assert {row["entry_id"] for row in capture["storage"]["core.config_entries"]["data"]["entries"]} == {
                 "ci-localtuya", "ci-venta", "ci-homekit"}
-            assert len(capture["entities"]) == 10
+            assert len(capture["entities"]) == 13
             browser_fixture.write_text(json.dumps(capture), encoding="utf-8")
         return result
 
