@@ -5,7 +5,7 @@
 # Venta AW730
 
 [![Проверки CI](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml/badge.svg)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/actions/workflows/validate.yml)
-[![Версия 1.2.0](https://img.shields.io/badge/version-1.2.0-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
+[![Версия 1.3.0](https://img.shields.io/badge/version-1.3.0-2ea44f)](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant)
 [![Home Assistant](https://img.shields.io/badge/Home_Assistant-2026.11%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
 [![Apple HomeKit](https://img.shields.io/badge/Apple-HomeKit-111111?logo=apple&logoColor=white)](https://www.home-assistant.io/integrations/homekit/)
 [![Алиса](https://img.shields.io/badge/Yandex-Alice-FFCC00)](https://docs.yaha-cloud.ru/)
@@ -37,11 +37,11 @@
 
 **Обновления:** после установки новой версии Venta через Marketplace и перезапуска Home Assistant неизменённый шаблон LocalTuya синхронизируется автоматически, прежняя копия сохраняется. Пользовательский шаблон не перезаписывается. Конфигурации ранее добавленных устройств хранятся в LocalTuya отдельно; изменения их сопоставлений требуют проверки. Учётные данные и идентификаторы сущностей автоматически не переписываются. Apple Home и Алиса используют **ту же существующую сущность увлажнителя**, без второго устройства.
 
-**Apple Home:** используйте существующий [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/). При новой настройке Venta 1.2.0 откройте «Настройки → Устройства и службы → Добавить интеграцию → Venta AW730», выберите существующий увлажнитель LocalTuya, мост и пять связанных сущностей. Альтернатива — [пример YAML](examples/configuration.yaml.example): подставьте свои ID, проверьте конфигурацию и перезапустите HA. Используйте только один способ настройки. Рабочую YAML-конфигурацию сохраняйте, если не решили выполнить [миграцию с проверенным резервным копированием](docs/YAML_MIGRATION.md). Не удаляйте существующую Venta и сопряжение HomeKit.
+**Apple Home:** используйте существующий [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/). При новой настройке Venta 1.3.0 откройте «Настройки → Устройства и службы → Добавить интеграцию → Venta AW730», выберите существующий увлажнитель LocalTuya, мост и пять связанных сущностей. Альтернатива — [пример YAML](examples/configuration.yaml.example): подставьте свои ID, проверьте конфигурацию и перезапустите HA. Используйте только один способ настройки. Рабочую YAML-конфигурацию сохраняйте, если не решили выполнить [миграцию с проверенным резервным копированием](docs/YAML_MIGRATION.md). Не удаляйте существующую Venta и сопряжение HomeKit.
 
 **Алиса:** экспортируйте ту же сущность увлажнителя через [Yaha Cloud](https://docs.yaha-cloud.ru/) ([исходники](https://github.com/dext0r/yandex_smart_home)).
 
-## Сервисные уведомления (кандидат 1.3.0; ещё не установлен)
+## Сервисные уведомления (1.3.0)
 
 Уведомления добровольные и работают только на чтение. В уже настроенной
 интеграции Venta откройте **Параметры**, выберите датчики LocalTuya для уровня

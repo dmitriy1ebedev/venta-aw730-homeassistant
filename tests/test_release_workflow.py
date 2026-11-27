@@ -79,6 +79,27 @@ class OneShotReleaseWorkflowTests(unittest.TestCase):
                          "No automatic YAML-to-UI migration", "SHA-256"):
             self.assertIn(required, notes)
 
+class V130ReleaseWorkflowTests(unittest.TestCase):
+    def test_release_requires_all_seven_successful_main_jobs_and_fixed_version(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/publish-v1-3-0.yml").read_text())
+        job = workflow["jobs"]["publish"]
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        self.assertEqual(job["permissions"], {"contents": "write", "actions": "read"})
+        self.assertNotIn("GH_TOKEN", job["env"])
+        self.assertIs(job["steps"][0]["with"]["persist-credentials"], False)
+        for required in ("workflow_run.conclusion == 'success'", "workflow_run.event == 'push'",
+                         "workflow_run.head_branch == 'main'", "workflow_run.head_repository.full_name == github.repository",
+                         "github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant'"):
+            self.assertIn(required, job["if"])
+        commands = "\n".join(step.get("run", "") for step in job["steps"])
+        for required in ("actions/runs/$CI_RUN/jobs", "jobs['total_count']", "j['conclusion'] == 'success'",
+                         "run['head_sha'] == os.environ['CI_SHA']", "assert version == \"1.3.0\"",
+                         "gh release create v1.3.0", "gh release download v1.3.0", "sha256sum --check",
+                         "--network none", "Tag exists at a different object; refusing retag"):
+            self.assertIn(required, commands)
+        self.assertNotIn("git push --force", commands)
+        self.assertNotIn("gh release delete", commands)
+        self.assertIn("rollback", (ROOT / "docs/RELEASE_NOTES_1_3_0.md").read_text())
 
 if __name__ == "__main__":
     unittest.main()

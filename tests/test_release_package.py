@@ -18,7 +18,7 @@ from scripts.build_release import (
 class ReleasePackageTests(unittest.TestCase):
     def test_manifest_changelog_and_tag_agreement(self):
         version = release_version()
-        self.assertEqual(version, "1.2.0")
+        self.assertEqual(version, "1.3.0")
         self.assertEqual(release_version(expected_tag="v" + version), version)
         with self.assertRaises(ReleaseValidationError):
             release_version(expected_tag="v9.9.9")

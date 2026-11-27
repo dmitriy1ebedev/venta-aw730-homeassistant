@@ -18,7 +18,7 @@ class HARuntimeStagingTests(unittest.TestCase):
             build_archive(archive)
             config = root / "isolated-config"
             report = stage(archive, config)
-            self.assertEqual(report["component_version"], "1.2.0")
+            self.assertEqual(report["component_version"], "1.3.0")
             self.assertTrue(report["no_device_credentials"])
             self.assertTrue((config / COMPONENT / "manifest.json").exists())
             self.assertEqual((config / "configuration.yaml").read_text(), FAKE_HA_CONFIG)
