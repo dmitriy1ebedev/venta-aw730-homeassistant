@@ -18,6 +18,11 @@ with patch.dict(sys.modules, {PACKAGE: package}):
     sys.modules[spec.name] = native
     spec.loader.exec_module(native)
     binding = sys.modules[PACKAGE + ".device_binding"]
+    spec = importlib.util.spec_from_file_location(PACKAGE + ".native_sensor_values", COMPONENT / "native_sensor_values.py")
+    assert spec and spec.loader
+    sensors = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = sensors
+    spec.loader.exec_module(sensors)
 
 
 class NativeControlTests(unittest.IsolatedAsyncioTestCase):
@@ -208,6 +213,46 @@ class NativeControlTests(unittest.IsolatedAsyncioTestCase):
         self.rows[self.roles["brightness"]].unique_id = "new-brightness"
         with self.assertRaisesRegex(native.ControlError, "role_identity_changed"):
             native.NativeControl(self.hass, self.identity, self.roles, expected_roles=pinned)
+
+
+    def test_native_sensor_values_are_validated_and_normalized(self):
+        def sample(role, value, unit, klass):
+            return sensors.sample_value(role, NS(state=value, attributes={
+                "unit_of_measurement": unit, "device_class": klass}))
+        self.assertEqual(sample("temperature", "68", "\N{DEGREE SIGN}F", "temperature"),
+                         (20.0, "\N{DEGREE SIGN}C"))
+        self.assertEqual(sample("humidity", "48", "%", "humidity"), (48.0, "%"))
+        self.assertEqual(sample("pm25", "12", "\N{GREEK SMALL LETTER MU}g/m\N{SUPERSCRIPT THREE}", "pm25"),
+                         (12.0, "\N{MICRO SIGN}g/m\N{SUPERSCRIPT THREE}"))
+        for role, value, unit, klass in (
+            ("humidity", "101", "%", "humidity"), ("humidity", "nan", "%", "humidity"),
+            ("temperature", "-300", "\N{DEGREE SIGN}C", "temperature"),
+            ("water_level", "20", "L", None), ("filter_days", "-1", "d", "duration"),
+            ("filter_days", "2", "h", "duration"), ("pm25", "1", "\N{MICRO SIGN}g/m\N{SUPERSCRIPT THREE}", None),
+            ("humidity", "unavailable", "%", "humidity"),
+        ):
+            with self.subTest(role=role, value=value):
+                self.assertIsNone(sample(role, value, unit, klass))
+
+    def test_optional_sensor_pins_and_no_unconfirmed_or_foreign_sources(self):
+        entity = "sensor.fixture_pm25"
+        self.rows[entity] = NS(entity_id=entity, unique_id="fixture-pm",
+            platform="localtuya", config_entry_id="source-config", device_id="source-device",
+            disabled_by=None, hidden_by=None, device_class="pm25")
+        self.states[entity] = NS(state="12", attributes={
+            "unit_of_measurement": "\N{MICRO SIGN}g/m\N{SUPERSCRIPT THREE}", "device_class": "pm25"})
+        configured = {"pm25": entity, "water_level": self.roles["humidity"]}
+        proposed = sensors.NativeSensors(self.controller, configured)
+        self.assertEqual(proposed.roles, {"pm25": entity})
+        self.assertEqual(sensors.NativeSensors(self.controller, configured, expected={}).roles, {})
+        confirmed = sensors.NativeSensors(self.controller, configured, expected=proposed.pins)
+        self.assertEqual(confirmed.sample("pm25")[0], 12)
+        self.rows[entity].unique_id = "replaced"
+        self.assertIsNone(confirmed.sample("pm25"))
+        self.assertEqual(sensors.NativeSensors(self.controller, configured, expected=proposed.pins).roles, {})
+        self.rows[entity].device_id = "foreign"
+        self.assertEqual(sensors.NativeSensors(self.controller, configured).roles, {})
+        self.assertFalse(self.calls)
 
 
 if __name__ == "__main__":

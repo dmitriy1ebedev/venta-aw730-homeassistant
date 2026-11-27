@@ -629,6 +629,7 @@ def _setup_logical_device(hass: HomeAssistant, entry, entity_id: str) -> None:
     active = hass.data[DOMAIN]
     active.pop("native_device", None)
     active.pop("native_control", None)
+    active.pop("native_sensors", None)
     if getattr(entry, "domain", None) != DOMAIN:
         return
     from .device_binding import BindingError, register_logical_device
@@ -660,6 +661,16 @@ def _setup_logical_device(hass: HomeAssistant, entry, entity_id: str) -> None:
         _LOGGER.warning("Venta: native controls unavailable; existing bridge retained")
         return
     active["native_control"] = controller
+    from .native_sensor_values import NativeSensors
+
+    try:
+        options = getattr(entry, "options", {})
+        active["native_sensors"] = NativeSensors(
+            controller, options.get("native_sensor_entities", {}),
+            expected=options.get("native_sensor_pins", {}),
+        )
+    except (ControlError, AttributeError, RuntimeError, TypeError, ValueError):
+        _LOGGER.warning("Venta: optional native sensor mappings unavailable")
 
 
 async def _setup_native_platforms(hass: HomeAssistant, entry) -> None:
@@ -674,7 +685,7 @@ async def _setup_native_platforms(hass: HomeAssistant, entry) -> None:
     from homeassistant.exceptions import HomeAssistantError
     from .export_guard import export_blockers
 
-    platforms = [Platform.HUMIDIFIER, Platform.FAN, Platform.LIGHT]
+    platforms = [Platform.HUMIDIFIER, Platform.FAN, Platform.LIGHT, Platform.SENSOR]
     try:
         if export_blockers(hass, entry.entry_id):
             _LOGGER.warning("Venta: native UI requires review of HomeKit/Yaha exports")

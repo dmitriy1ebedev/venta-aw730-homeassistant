@@ -90,7 +90,8 @@
           "service_days_entity": "Датчик сервисного интервала (дни) — необязательно",
           "confirm_service_monitoring": "Я включаю только уведомления без команд устройству после следующего безопасного запуска HA",
           "native_device_ui": "Собственные элементы управления Venta (после перезапуска)",
-          "confirm_native_device_ui": "Подтверждаю проверку экспорта HomeKit и Яндекс"
+          "confirm_native_device_ui": "Подтверждаю проверку экспорта HomeKit и Яндекс",
+          "pm25_entity": "Датчик PM2.5 — необязательно"
         }
       }
     },
@@ -99,7 +100,8 @@
       "invalid_entity": "Сущность недоступна или принадлежит другому устройству.",
       "bridge_unavailable": "Выбранный мост HomeKit недоступен.",
       "bridge_excludes_humidifier": "Мост HomeKit исключает этот увлажнитель.",
-      "native_export_review_required": "Проверьте явные фильтры экспорта HomeKit и Яндекс, подтвердите выбор."
+      "native_export_review_required": "Проверьте явные фильтры экспорта HomeKit и Яндекс, подтвердите выбор.",
+      "native_sensor_review_required": "Проверьте типы, уникальность и привязки выбранных датчиков Venta."
     },
     "abort": {
       "yaml_or_other_owner": "Действующая привязка HomeKit принадлежит YAML или другой записи.",
@@ -146,6 +148,29 @@
     "light": {
       "native_led": {
         "name": "Подсветка"
+      }
+    },
+    "sensor": {
+      "native_temperature": {
+        "name": "Температура"
+      },
+      "native_humidity": {
+        "name": "Влажность"
+      },
+      "native_pm25": {
+        "name": "PM2.5"
+      },
+      "native_water_level": {
+        "name": "Уровень воды"
+      },
+      "native_filter_days": {
+        "name": "Ресурс фильтра"
+      },
+      "native_cleaning_days": {
+        "name": "До очистки"
+      },
+      "native_service_days": {
+        "name": "До обслуживания"
       }
     }
   }

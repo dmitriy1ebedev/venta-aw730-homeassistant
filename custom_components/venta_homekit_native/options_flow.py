@@ -62,6 +62,9 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
         stored_service_map = entry.options.get("service_advisory_entities", {})
         if not isinstance(stored_service_map, dict):
             stored_service_map = {}
+        stored_native_sensors = entry.options.get("native_sensor_entities", {})
+        if not isinstance(stored_native_sensors, dict):
+            stored_native_sensors = {}
         errors: dict[str, str] = {}
         if user_input is not None:
             native_ui = user_input.get("native_device_ui", entry.options.get("native_device_ui", False))
@@ -112,6 +115,30 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
             errors.update(review_errors)
             if not errors and user_input.get("confirm_staging") is not True:
                 errors["base"] = "staging_confirmation_required"
+            native_sensors = {}
+            sensor_pins = {}
+            if not errors and native_ui:
+                from .device_binding import BindingError, resolve_source
+                from .native_control import ControlError
+                from .native_sensor_values import sensor_fingerprint
+
+                native_sensors = dict(requested_service_map)
+                pm25 = user_input.get("pm25_entity", stored_native_sensors.get("pm25", ""))
+                if not isinstance(pm25, str) or (pm25 and pm25 not in available_service_sensors):
+                    errors["pm25_entity"] = "invalid_entity"
+                elif pm25:
+                    native_sensors["pm25"] = pm25
+                try:
+                    registry = er.async_get(self.hass)
+                    source = registry.async_get(current[SOURCE])
+                    identity = resolve_source(self.hass, current[SOURCE], expected=current.get("native_device_identity"))
+                    if (len(set(native_sensors.values())) != len(native_sensors)
+                            or set(native_sensors.values()) & set(selections.values())):
+                        raise ControlError("duplicate_sensor")
+                    sensor_pins = {role: sensor_fingerprint(source, registry.async_get(entity_id), role, identity)
+                                   for role, entity_id in native_sensors.items()}
+                except (BindingError, ControlError, AttributeError, RuntimeError, TypeError, ValueError):
+                    errors["base"] = "native_sensor_review_required"
             if not errors and proposal is not None:
                 options = dict(entry.options)
                 if mapping_changed(current, proposal):
@@ -127,8 +154,12 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
                     options.pop("service_advisory_entities", None)
                 if native_ui:
                     options["native_device_ui"] = True
+                    options["native_sensor_entities"] = native_sensors
+                    options["native_sensor_pins"] = sensor_pins
                 else:
                     options.pop("native_device_ui", None)
+                    options.pop("native_sensor_entities", None)
+                    options.pop("native_sensor_pins", None)
                 return self.async_create_entry(title="", data=options)
 
         def required_choice(key: str, choices: Any) -> Any:
@@ -161,6 +192,10 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
         schema[vol.Optional("confirm_service_monitoring", default=False)] = bool
         schema[vol.Optional("native_device_ui", default=entry.options.get("native_device_ui") is True)] = bool
         schema[vol.Optional("confirm_native_device_ui", default=False)] = bool
+        schema[vol.Optional("pm25_entity", default=stored_native_sensors.get("pm25", ""))] = vol.In({
+            "": "Disabled",
+            **{entity_id: entity_id for entity_id in available_service_sensors},
+        })
         schema[vol.Required("confirm_staging", default=False)] = bool
         return self.async_show_form(
             step_id="init", data_schema=vol.Schema(schema), errors=errors,

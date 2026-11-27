@@ -90,7 +90,8 @@
           "service_days_entity": "Service interval sensor (days) — optional",
           "confirm_service_monitoring": "I explicitly enable read-only service notifications after the next safe HA start",
           "native_device_ui": "Native Venta controls (after restart)",
-          "confirm_native_device_ui": "I confirm HomeKit and Yandex export review"
+          "confirm_native_device_ui": "I confirm HomeKit and Yandex export review",
+          "pm25_entity": "PM2.5 sensor — optional"
         }
       }
     },
@@ -99,7 +100,8 @@
       "invalid_entity": "The selected entity is unavailable or belongs to another device.",
       "bridge_unavailable": "The selected HomeKit bridge is not available.",
       "bridge_excludes_humidifier": "The HomeKit bridge excludes this humidifier.",
-      "native_export_review_required": "Review explicit HomeKit and Yandex export filters and confirm."
+      "native_export_review_required": "Review explicit HomeKit and Yandex export filters and confirm.",
+      "native_sensor_review_required": "Review sensor classes, distinct roles and Venta source bindings."
     },
     "abort": {
       "yaml_or_other_owner": "The current Venta HomeKit binding is owned by YAML or another entry.",
@@ -146,6 +148,29 @@
     "light": {
       "native_led": {
         "name": "LED"
+      }
+    },
+    "sensor": {
+      "native_temperature": {
+        "name": "Temperature"
+      },
+      "native_humidity": {
+        "name": "Humidity"
+      },
+      "native_pm25": {
+        "name": "PM2.5"
+      },
+      "native_water_level": {
+        "name": "Water level"
+      },
+      "native_filter_days": {
+        "name": "Filter interval"
+      },
+      "native_cleaning_days": {
+        "name": "Cleaning interval"
+      },
+      "native_service_days": {
+        "name": "Service interval"
       }
     }
   }
