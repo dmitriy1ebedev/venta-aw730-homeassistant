@@ -79,3 +79,45 @@ def logical_device_info(identity: str) -> dict[str, Any]:
         "model": "AW730",
         "name": "Venta AW730 (LocalTuya)",
     }
+
+
+PIN_FIELD = "native_device_identity"
+
+
+def register_logical_device(hass: Any, entry: Any, entity_id: str) -> tuple[str, str]:
+    """Register only our own device, keeping the source identity pinned.
+
+    No entity is moved; no service is called. A changed or removed source
+    cannot create another device under the same Venta configuration entry.
+    """
+    from homeassistant.helpers import device_registry as dr
+
+    if getattr(entry, "domain", None) != DOMAIN or getattr(entry, "disabled_by", None) is not None:
+        raise BindingError("invalid_venta_entry")
+    if hass.config_entries.async_get_entry(entry.entry_id) is not entry:
+        raise BindingError("venta_entry_not_current")
+    expected = entry.data.get(PIN_FIELD)
+    if expected is not None:
+        logical_device_info(expected)  # Reject corrupt pins without rewriting them.
+    identity = resolve_source(hass, entity_id, expected=expected)
+    info = logical_device_info(identity)
+    identifier = next(iter(info["identifiers"]))
+    registry = dr.async_get(hass)
+    owned = dr.async_entries_for_config_entry(registry, entry.entry_id)
+    existing = registry.async_get_device_by_identifier(identifier, entry.entry_id)
+    if owned and (len(owned) != 1 or existing is None or owned[0].id != existing.id):
+        raise BindingError("logical_device_conflict")
+    if existing is not None and (
+        existing.config_entry_id != entry.entry_id
+        or existing.identifiers != info["identifiers"]
+        or existing.connections
+    ):
+        raise BindingError("logical_device_conflict")
+    device = registry.async_get_or_create(config_entry_id=entry.entry_id, **info)
+    if device.config_entry_id != entry.entry_id or device.identifiers != info["identifiers"]:
+        raise BindingError("logical_device_conflict")
+    if expected is None:
+        hass.config_entries.async_update_entry(entry, data={**entry.data, PIN_FIELD: identity})
+        if entry.data.get(PIN_FIELD) != identity:
+            raise BindingError("source_pin_not_saved")
+    return identity, device.id

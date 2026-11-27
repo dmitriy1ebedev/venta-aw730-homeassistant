@@ -86,9 +86,149 @@ def validate(config: Path, expected_version: str) -> dict:
     }
 
 
+def validate_device_registry(config: Path) -> dict:
+    """Exercise the actual HA registries across two independently loaded stores."""
+    import asyncio
+    import tempfile
+    from datetime import datetime, timezone
+
+    from homeassistant import bootstrap, config_entries, loader
+    from homeassistant.core import HomeAssistant
+    from homeassistant.helpers import device_registry as dr, entity_registry as er
+
+    component = config / "custom_components" / "venta_homekit_native" / "device_binding.py"
+    spec = importlib.util.spec_from_file_location("venta_device_binding_ci", component)
+    assert spec and spec.loader
+    binding = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(binding)
+
+    def fixture_entry(entry_id, domain):
+        now = datetime.now(timezone.utc).isoformat()
+        return {
+            "created_at": now, "modified_at": now, "data": {},
+            "discovery_keys": {}, "disabled_by": None, "domain": domain,
+            "entry_id": entry_id, "minor_version": 1, "options": {},
+            "pref_disable_new_entities": False, "pref_disable_polling": False,
+            "source": "user", "subentries": [], "title": domain,
+            "unique_id": None, "version": 1,
+        }
+
+    async def exercise(root: Path, previous=None):
+        hass = HomeAssistant(str(root))
+        loader.async_setup(hass)
+        hass.config_entries = config_entries.ConfigEntries(hass, {})
+        await loader.async_get_custom_components(hass)
+        assert await bootstrap.async_load_base_functionality(hass)
+        registry, entities = dr.async_get(hass), er.async_get(hass)
+        source_entry = hass.config_entries.async_get_entry("ci-localtuya")
+        venta = hass.config_entries.async_get_entry("ci-venta")
+        neighbor_entry = hass.config_entries.async_get_entry("ci-neighbor")
+        assert source_entry and venta and neighbor_entry
+        try:
+            if previous is None:
+                source = registry.async_get_or_create(
+                    config_entry_id=source_entry.entry_id,
+                    identifiers={("localtuya", "synthetic-source")},
+                    name="CI source",
+                )
+                neighbor = registry.async_get_or_create(
+                    config_entry_id=neighbor_entry.entry_id,
+                    identifiers={("mqtt", "synthetic-neighbor")},
+                    name="CI neighbor",
+                )
+                humidifier = entities.async_get_or_create(
+                    "humidifier", "localtuya", "synthetic-humidifier",
+                    config_entry=source_entry, device_id=source.id,
+                    suggested_object_id="venta_ci_source",
+                )
+                led = entities.async_get_or_create(
+                    "switch", "localtuya", "synthetic-led",
+                    config_entry=source_entry, device_id=source.id,
+                    suggested_object_id="venta_ci_led",
+                )
+                unrelated = entities.async_get_or_create(
+                    "sensor", "mqtt", "synthetic-neighbor",
+                    config_entry=neighbor_entry, device_id=neighbor.id,
+                    suggested_object_id="venta_ci_neighbor",
+                )
+            else:
+                source = registry.async_get(previous["source"])
+                neighbor = registry.async_get(previous["neighbor"])
+                humidifier = entities.async_get(previous["humidifier"])
+                led = entities.async_get(previous["led"])
+                unrelated = entities.async_get(previous["unrelated"])
+                assert all(item is not None for item in (source, neighbor, humidifier, led, unrelated))
+                assert venta.data.get(binding.PIN_FIELD) == previous["identity"]
+            source_before, neighbor_before = source, neighbor
+            original_entities = {item.entity_id: item for item in (humidifier, led, unrelated)}
+            identity, card = binding.register_logical_device(hass, venta, humidifier.entity_id)
+            assert binding.register_logical_device(hass, venta, humidifier.entity_id) == (identity, card)
+            assert registry.async_get(card).config_entry_id == venta.entry_id
+            assert card != source.id and card != neighbor.id
+            assert len(dr.async_entries_for_config_entry(registry, venta.entry_id)) == 1
+            assert registry.async_get(source.id) == source_before
+            assert registry.async_get(neighbor.id) == neighbor_before
+            assert all(entities.async_get(key) == value for key, value in original_entities.items())
+            result = {
+                "source": source.id, "neighbor": neighbor.id, "card": card,
+                "humidifier": humidifier.entity_id, "led": led.entity_id,
+                "unrelated": unrelated.entity_id, "identity": identity,
+            }
+            if previous is not None:
+                assert result == previous, "registry identity changed across reload"
+                # A different valid LocalTuya humidifier is never accepted as
+                # a replacement, even on the same physical registry device.
+                replacement = entities.async_get_or_create(
+                    "humidifier", "localtuya", "synthetic-replacement",
+                    config_entry=source_entry, device_id=source.id,
+                    suggested_object_id="venta_ci_replacement",
+                )
+                for entity_id, reason in (
+                    (replacement.entity_id, "source_identity_changed"),
+                    ("humidifier.missing_ci_source", "source_missing"),
+                ):
+                    try:
+                        binding.register_logical_device(hass, venta, entity_id)
+                    except binding.BindingError as exc:
+                        assert str(exc) == reason
+                    else:
+                        raise AssertionError("changed/missing binding accepted")
+                assert len(dr.async_entries_for_config_entry(registry, venta.entry_id)) == 1
+                assert venta.data[binding.PIN_FIELD] == identity
+                assert registry.async_get(card).id == card
+            return result
+        finally:
+            await hass.async_stop(force=True)
+
+    with tempfile.TemporaryDirectory(prefix="venta-ci-device-registry-") as tmp:
+        root = Path(tmp)
+        storage = root / ".storage"
+        storage.mkdir()
+        (storage / "core.config_entries").write_text(json.dumps({
+            "version": 1, "minor_version": 5, "key": "core.config_entries",
+            "data": {"entries": [
+                fixture_entry("ci-localtuya", "localtuya"),
+                fixture_entry("ci-venta", binding.DOMAIN),
+                fixture_entry("ci-neighbor", "mqtt"),
+            ]},
+        }), encoding="utf-8")
+        captured = asyncio.run(exercise(root))
+        assert (storage / "core.device_registry").is_file()
+        assert (storage / "core.entity_registry").is_file()
+        assert asyncio.run(exercise(root, captured)) == captured
+    return {
+        "real_device_registry": True, "separate_device": True,
+        "real_entity_registry": True, "stable_across_storage_reload": True,
+        "original_registry_entries_unchanged": True, "replacement_rejected": True,
+        "physical_device_calls": 0,
+    }
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--ha-version", required=True)
     args = parser.parse_args()
-    print(json.dumps(validate(args.config, args.ha_version), sort_keys=True))
+    result = validate(args.config, args.ha_version)
+    result["native_device"] = validate_device_registry(args.config)
+    print(json.dumps(result, sort_keys=True))

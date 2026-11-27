@@ -24,7 +24,8 @@ jobs:
         github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_branch == 'main' &&
         github.event.workflow_run.head_repository.full_name == github.repository &&
-        github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant'
+        github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant' &&
+        github.event.workflow_run.head_sha == 'de9a63596cecb409ba5ac72688e222626bcdbc8c'
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 30

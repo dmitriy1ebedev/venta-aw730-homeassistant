@@ -624,8 +624,26 @@ def _clear_binding_issue(hass: HomeAssistant, entry) -> None:
         _LOGGER.warning("Venta binding issue cleanup was unavailable")
 
 
+def _setup_logical_device(hass: HomeAssistant, entry, entity_id: str) -> None:
+    """Card registration is isolated from the working HomeKit accessory."""
+    active = hass.data[DOMAIN]
+    active.pop("native_device", None)
+    if getattr(entry, "domain", None) != DOMAIN:
+        return
+    from .device_binding import BindingError, register_logical_device
+    from homeassistant.exceptions import HomeAssistantError
+    try:
+        identity, device_id = register_logical_device(hass, entry, entity_id)
+    except (BindingError, HomeAssistantError, AttributeError, ImportError, RuntimeError, TypeError, ValueError):
+        # Do not log registry IDs, credentials or arbitrary exception messages.
+        # Incompatible/missing sources leave only the pre-existing bridge active.
+        _LOGGER.warning("Venta: native device registration unavailable; existing bridge retained")
+        return
+    active["native_device"] = {"identity": identity, "device_id": device_id}
+
+
 async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
-    """Set up one approved UI mapping without creating any HA entities.
+    """Set up one approved UI mapping and its separate logical device.
 
     The legacy YAML bridge is authoritative until explicitly migrated in
     V120-03. A second entry may never take over the singleton HAP factory.
@@ -637,6 +655,8 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
         _LOGGER.error("Venta: existing YAML or another UI entry owns the HomeKit patch")
         return False
     values = dict(entry.data)
+    # Registry identity is metadata, not part of the existing HAP mapping.
+    values.pop("native_device_identity", None)
     # Service advisories are an explicit UI option, staged without a live
     # HomeKit reload. Revalidate registry ownership at the next safe setup.
     advisory_options = getattr(entry, "options", {}).get("service_advisory_entities")
@@ -674,6 +694,7 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
         # second listener, registration or HomeKit accessory, and never accept
         # changed mappings in place: those need guarded reload/migration.
         if active.get("config_entry_data") == values:
+            _setup_logical_device(hass, entry, values["humidifier_entity"])
             _clear_binding_issue(hass, entry)
             return True
         _LOGGER.error("Venta: saved UI mapping differs from the active binding")
@@ -682,6 +703,7 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     if ok and hass.data.get(DOMAIN, {}).get("patched"):
         hass.data[DOMAIN]["config_entry_id"] = entry.entry_id
         hass.data[DOMAIN]["config_entry_data"] = values.copy()
+        _setup_logical_device(hass, entry, values["humidifier_entity"])
         _clear_binding_issue(hass, entry)
     elif not ok:
         _report_binding_issue(hass, entry)
