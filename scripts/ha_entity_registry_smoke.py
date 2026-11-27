@@ -232,7 +232,7 @@ def validate_native_platforms(config: Path) -> dict:
     import tempfile
     from datetime import datetime, timezone
 
-    from homeassistant import auth, bootstrap, config_entries, loader, setup
+    from homeassistant import bootstrap, config_entries, loader, setup
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -254,7 +254,6 @@ def validate_native_platforms(config: Path) -> dict:
         hass.config_entries = config_entries.ConfigEntries(hass, {})
         await loader.async_get_custom_components(hass)
         assert await bootstrap.async_load_base_functionality(hass)
-        hass.auth = await auth.auth_manager_from_config(hass, [], [])
         devices, registry = dr.async_get(hass), er.async_get(hass)
         source = hass.config_entries.async_get_entry("ci-localtuya")
         entry = hass.config_entries.async_get_entry("ci-venta")
@@ -326,10 +325,18 @@ def validate_native_platforms(config: Path) -> dict:
                 instance.data[venta.DOMAIN] = {"patched": True}
                 return True
 
-            with patch.object(venta, "async_setup", no_hap_setup):
-                async with entry.setup_lock:
-                    assert await venta.async_setup_entry(hass, entry)
-            await hass.async_block_till_done()
+            # HA setup.py marks the top-level component loaded BEFORE it
+            # enters the config-entry setup lock, specifically to prevent
+            # forwarding from recursively setting up the same entry. We
+            # reproduce that lifecycle step for the stubbed HAP owner only.
+            hass.config.components.add(venta.DOMAIN)
+            print("native platform fixture: forwarding", flush=True)
+            async with asyncio.timeout(45):
+                with patch.object(venta, "async_setup", no_hap_setup):
+                    async with entry.setup_lock:
+                        assert await venta.async_setup_entry(hass, entry)
+                await hass.async_block_till_done()
+            print("native platform fixture: forwarded", flush=True)
             active = hass.data[venta.DOMAIN]
             assert active.get("native_ui_platforms_loaded"), "native platforms did not load"
             card = devices.async_get(active["native_device"]["device_id"])
@@ -433,7 +440,7 @@ def validate_native_platforms(config: Path) -> dict:
                 fixture_entry("ci-homekit", "homekit", disabled_by="user"),
             ]},
         }), encoding="utf-8")
-        return asyncio.run(exercise(root))
+        return asyncio.run(asyncio.wait_for(exercise(root), timeout=120))
 
 
 if __name__ == "__main__":
