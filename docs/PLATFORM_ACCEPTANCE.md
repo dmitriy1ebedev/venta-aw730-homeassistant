@@ -28,7 +28,20 @@ Sleep mode semantics, LED option mapping and existing accessory identity
 are not changed. A service call returning successfully does not establish
 physical readback; no new claim of confirmed device state is made.
 
-## Owner-authorized acceptance (not yet executed)
+## Engineering acceptance and deferred physical checks
+
+The owner accepted the independently verifiable engineering scope on
+2026-11-26. PR #42 passed all seven GitHub checks (45774549134 and
+45774909350), GitVerse 2224006 and native test job mwx873ue-3e (267/267).
+The real isolated HA/PyHAP command contract and identity regressions passed.
+Read-only production inspection found one existing humidifier exported by
+one readable HomeKit bridge and Yaha Cloud. Another bridge's export could
+not be read completely. The installed integration remains v1.2.0. No actual
+Apple Home or Alice client command, physical reset, candidate deployment or
+full export audit is claimed. Track deferred hardware acceptance in
+[issue #43](https://github.com/dmitriy1ebedev/venta-aw730-homeassistant/issues/43).
+
+## Owner-authorized physical acceptance (not yet executed)
 
 Before testing, record the current mode, power, target RH, fan and LED
 settings locally. Confirm backup and rollback readiness, without publishing
