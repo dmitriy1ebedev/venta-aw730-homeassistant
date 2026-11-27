@@ -224,7 +224,7 @@ def validate_device_registry(config: Path) -> dict:
     }
 
 
-def validate_native_platforms(config: Path) -> dict:
+def validate_native_platforms(config: Path, browser_fixture: Path | None = None) -> dict:
     """Actual HA entity platforms + service dispatch; synthetic LocalTuya only."""
     import asyncio
     import shutil
@@ -356,6 +356,18 @@ def validate_native_platforms(config: Path) -> dict:
                 state = hass.states.get(projections[role].entity_id)
                 assert state is not None and state.state not in ("unknown", "unavailable"), role
 
+            if browser_fixture is not None:
+                # Export only the verified synthetic fixture. No live HA
+                # storage, authentication or user data is accessible here.
+                capture = {
+                    "device_id": card.id,
+                    "entities": {role: row.entity_id for role, row in projections.items()},
+                    "states": {entity_id: {"state": hass.states.get(entity_id).state,
+                        "attributes": dict(hass.states.get(entity_id).attributes)}
+                        for entity_id in (*roles.values(), *(row.entity_id for row in projections.values()))},
+                }
+                (root / "native-browser-states.json").write_text(json.dumps(capture), encoding="utf-8")
+
             # Use HA's native service registry for the OUTER call. Intercept
             # only the exact synthetic LocalTuya IDs for source readback.
             original_call = type(hass.services).async_call
@@ -440,15 +452,25 @@ def validate_native_platforms(config: Path) -> dict:
                 fixture_entry("ci-homekit", "homekit", disabled_by="user"),
             ]},
         }), encoding="utf-8")
-        return asyncio.run(asyncio.wait_for(exercise(root), timeout=120))
+        result = asyncio.run(asyncio.wait_for(exercise(root), timeout=120))
+        if browser_fixture is not None:
+            capture = json.loads((root / "native-browser-states.json").read_text())
+            capture["storage"] = {name: json.loads((storage / name).read_text())
+                for name in ("core.device_registry", "core.entity_registry", "core.config_entries")}
+            assert {row["entry_id"] for row in capture["storage"]["core.config_entries"]["data"]["entries"]} == {
+                "ci-localtuya", "ci-venta", "ci-homekit"}
+            assert len(capture["entities"]) == 10
+            browser_fixture.write_text(json.dumps(capture), encoding="utf-8")
+        return result
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--ha-version", required=True)
+    parser.add_argument("--browser-fixture", type=Path)
     args = parser.parse_args()
     result = validate(args.config, args.ha_version)
     result["native_device"] = validate_device_registry(args.config)
-    result["native_platforms"] = validate_native_platforms(args.config)
+    result["native_platforms"] = validate_native_platforms(args.config, args.browser_fixture)
     print(json.dumps(result, sort_keys=True))

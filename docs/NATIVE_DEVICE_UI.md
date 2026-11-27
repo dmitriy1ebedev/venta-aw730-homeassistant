@@ -67,6 +67,12 @@ LocalTuya остаётся транспортом. В настройках Venta
 не подтверждены, новые сущности не создаются; существующий мост сохраняется.
 Неподтверждённые счётчики и PM2.5 не угадываются, сбросы не выполняются.
 
-CI uses only isolated Home Assistant and synthetic source state. The live
-cutover, native mobile/desktop device-page acceptance and physical readback
-remain separate gates.
+CI uses only isolated Home Assistant and synthetic source state. The actual
+HA platform smoke registers ten native entities, exercises the native HA
+service registry and checks the simulated LocalTuya readback. A separate
+stock frontend gate replays that successful run's synthetic device/entity
+registry and state snapshot in a clean HA instance with inert integration
+stubs, then navigates from the standard integration page to its device card
+at 1280 px and 390 px. It verifies all ten entity rows and viewport bounds.
+This is stock UI rendering evidence, not a browser-to-hardware command test.
+The live cutover and physical readback remain separate gates.
