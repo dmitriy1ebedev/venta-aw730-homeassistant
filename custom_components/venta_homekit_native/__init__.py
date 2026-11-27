@@ -624,8 +624,123 @@ def _clear_binding_issue(hass: HomeAssistant, entry) -> None:
         _LOGGER.warning("Venta binding issue cleanup was unavailable")
 
 
+def _setup_logical_device(hass: HomeAssistant, entry, entity_id: str) -> None:
+    """Card registration is isolated from the working HomeKit accessory."""
+    active = hass.data[DOMAIN]
+    active.pop("native_device", None)
+    active.pop("native_control", None)
+    active.pop("native_sensors", None)
+    if getattr(entry, "domain", None) != DOMAIN:
+        return
+    from .device_binding import BindingError, register_logical_device
+    from homeassistant.exceptions import HomeAssistantError
+    try:
+        identity, device_id = register_logical_device(hass, entry, entity_id)
+    except (BindingError, HomeAssistantError, AttributeError, ImportError, RuntimeError, TypeError, ValueError):
+        # Do not log registry IDs, credentials or arbitrary exception messages.
+        # Incompatible/missing sources leave only the pre-existing bridge active.
+        _LOGGER.warning("Venta: native device registration unavailable; existing bridge retained")
+        return
+    active["native_device"] = {"identity": identity, "device_id": device_id}
+    # Prepare the pinned controller before any native UI platform is forwarded.
+    from .native_control import ControlError, NativeControl
+
+    roles = {role: entry.data.get(f"{role}_entity") for role in (
+        "humidifier", "fan", "led", "brightness", "temperature", "humidity",
+    )}
+    expected_roles = entry.data.get("native_role_identities")
+    try:
+        controller = NativeControl(hass, identity, roles, expected_roles=expected_roles)
+        if expected_roles is None:
+            hass.config_entries.async_update_entry(
+                entry, data={**entry.data, "native_role_identities": controller.role_identities.copy()},
+            )
+            if entry.data.get("native_role_identities") != controller.role_identities:
+                raise ControlError("role_pin_not_saved")
+    except (ControlError, HomeAssistantError, AttributeError, RuntimeError, TypeError, ValueError):
+        _LOGGER.warning("Venta: native controls unavailable; existing bridge retained")
+        return
+    try:
+        controller.configure_extras(entry.options.get("native_extra_entities", {}),
+                                    entry.options.get("native_extra_pins", {}))
+    except (ControlError, AttributeError, RuntimeError, TypeError, ValueError):
+        _LOGGER.warning("Venta: optional controls require review")
+    active["native_control"] = controller
+    from .native_sensor_values import NativeSensors
+
+    try:
+        options = getattr(entry, "options", {})
+        active["native_sensors"] = NativeSensors(
+            controller, options.get("native_sensor_entities", {}),
+            expected=options.get("native_sensor_pins", {}),
+        )
+    except (ControlError, AttributeError, RuntimeError, TypeError, ValueError):
+        _LOGGER.warning("Venta: optional native sensor mappings unavailable")
+
+
+async def _setup_native_platforms(hass: HomeAssistant, entry) -> None:
+    """Forward standard HA platforms only after explicit, verified opt-in."""
+    active = hass.data[DOMAIN]
+    if active.get("native_ui_platforms_loaded"):
+        return
+    if (getattr(entry, "options", {}).get("native_device_ui") is not True
+            or active.get("native_control") is None):
+        return
+    from homeassistant.const import Platform
+    from homeassistant.exceptions import HomeAssistantError
+    from .export_guard import export_blockers
+    from homeassistant.helpers import entity_registry as er
+
+    platforms = [Platform.HUMIDIFIER, Platform.FAN, Platform.LIGHT, Platform.SENSOR]
+    from .native_control import EXTRA_DOMAINS
+    extras = active["native_control"].extra_roles
+    platforms.extend(Platform(EXTRA_DOMAINS[role]) for role in extras)
+    try:
+        if export_blockers(hass, entry.entry_id):
+            _LOGGER.warning("Venta: native UI requires review of HomeKit/Yaha exports")
+            return
+        active["native_ui_enabled"] = True
+
+        def admitted():
+            try:
+                current = hass.config_entries.async_get_entry(entry.entry_id)
+                return bool(current is not None and current.options.get("native_device_ui") is True
+                            and active.get("native_ui_enabled") is True
+                            and hass.data.get(DOMAIN) is active
+                            and not export_blockers(hass, entry.entry_id))
+            except (AttributeError, RuntimeError, TypeError, ValueError):
+                return False
+
+        active["native_control"].admission = admitted
+        await hass.config_entries.async_forward_entry_setups(entry, platforms)
+        # HA may log and absorb forwarded platform errors. Verify the actual
+        # registered entities rather than treating a returned coroutine as proof.
+        suffixes = {"native_humidifier", "native_fan", "native_led"}
+        suffixes.update("native_" + role for role in extras)
+        sensors = active.get("native_sensors")
+        if sensors is not None:
+            suffixes.update("native_" + role for role in ("temperature", "humidity", *sensors.roles))
+        identity = active["native_device"]["identity"]
+        expected = {identity + "-" + suffix for suffix in suffixes}
+        registry = er.async_get(hass)
+        ready = {row.unique_id for row in er.async_entries_for_config_entry(registry, entry.entry_id)
+                 if row.platform == DOMAIN and row.device_id == active["native_device"]["device_id"]
+                 and (row.disabled_by is not None or hass.states.get(row.entity_id) is not None)}
+        if not expected.issubset(ready):
+            raise HomeAssistantError("Venta native platform registration incomplete")
+    except (HomeAssistantError, AttributeError, RuntimeError, TypeError, ValueError):
+        active["native_ui_enabled"] = False
+        _LOGGER.warning("Venta: native UI setup failed; existing bridge retained")
+        try:
+            await hass.config_entries.async_unload_platforms(entry, platforms)
+        except (HomeAssistantError, AttributeError, RuntimeError, TypeError, ValueError):
+            _LOGGER.warning("Venta: native UI cleanup requires a safe restart")
+        return
+    active["native_ui_platforms_loaded"] = True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
-    """Set up one approved UI mapping without creating any HA entities.
+    """Set up one approved UI mapping and its separate logical device.
 
     The legacy YAML bridge is authoritative until explicitly migrated in
     V120-03. A second entry may never take over the singleton HAP factory.
@@ -637,6 +752,9 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
         _LOGGER.error("Venta: existing YAML or another UI entry owns the HomeKit patch")
         return False
     values = dict(entry.data)
+    # Registry identity is metadata, not part of the existing HAP mapping.
+    values.pop("native_device_identity", None)
+    values.pop("native_role_identities", None)
     # Service advisories are an explicit UI option, staged without a live
     # HomeKit reload. Revalidate registry ownership at the next safe setup.
     advisory_options = getattr(entry, "options", {}).get("service_advisory_entities")
@@ -674,6 +792,9 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
         # second listener, registration or HomeKit accessory, and never accept
         # changed mappings in place: those need guarded reload/migration.
         if active.get("config_entry_data") == values:
+            if not active.get("native_ui_platforms_loaded"):
+                _setup_logical_device(hass, entry, values["humidifier_entity"])
+                await _setup_native_platforms(hass, entry)
             _clear_binding_issue(hass, entry)
             return True
         _LOGGER.error("Venta: saved UI mapping differs from the active binding")
@@ -682,6 +803,8 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
     if ok and hass.data.get(DOMAIN, {}).get("patched"):
         hass.data[DOMAIN]["config_entry_id"] = entry.entry_id
         hass.data[DOMAIN]["config_entry_data"] = values.copy()
+        _setup_logical_device(hass, entry, values["humidifier_entity"])
+        await _setup_native_platforms(hass, entry)
         _clear_binding_issue(hass, entry)
     elif not ok:
         _report_binding_issue(hass, entry)

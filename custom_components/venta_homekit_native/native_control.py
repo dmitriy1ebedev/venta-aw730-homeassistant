@@ -1,0 +1,349 @@
+"""Validated, non-optimistic commands for the Venta HA user interface.
+
+All I/O is delegated to existing HA services. Never create a Tuya connection
+or modify registry ownership. The controller does not export any entities.
+"""
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import math
+from typing import Any
+
+from .device_binding import BindingError, resolve_source
+
+DOMAINS = {"humidifier": "humidifier", "fan": "select", "led": "switch",
+           "brightness": "select", "temperature": "sensor", "humidity": "sensor"}
+EXTRA_DOMAINS = {"led_color": "select", "hybrid": "switch", "rh_offset": "number"}
+COLORS = ("purple", "blue", "green", "light green", "lemon", "yellow", "orange", "AQI")
+MODES = ("Auto", "Manual", "Sleep")
+FAN_OPTIONS = tuple(str(i) for i in range(1, 6))
+LED_OPTIONS = tuple(str(i) for i in range(1, 9))
+
+
+class ControlError(ValueError):
+    """Stable, privacy-safe reason why a command could not be completed."""
+
+
+def _integer(value: Any, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ControlError("invalid_value")
+    if not minimum <= value <= maximum or not math.isfinite(value) or int(value) != value:
+        raise ControlError("invalid_value")
+    return int(value)
+
+
+def _role_fingerprint(source, row, role: str, identity: str) -> str:
+    """Bind role to the confirmed source and original registry unique ID."""
+    entity_id = getattr(row, "entity_id", None)
+    unique = getattr(row, "unique_id", None)
+    if (
+        row is None or not isinstance(entity_id, str)
+        or not entity_id.startswith((DOMAINS | EXTRA_DOMAINS)[role] + ".")
+        or getattr(row, "platform", None) != "localtuya"
+        or getattr(row, "device_id", None) != source.device_id
+        or getattr(row, "config_entry_id", None) != source.config_entry_id
+        or getattr(row, "disabled_by", None) is not None
+        or getattr(row, "hidden_by", None) is not None
+        or not isinstance(unique, str) or not unique
+    ):
+        raise ControlError("role_binding_invalid")
+    return hashlib.sha256(
+        json.dumps(["venta-native-role-v1", identity, role, unique],
+                   separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+class NativeControl:
+    """Serializes commands, checks role identity immediately before each write."""
+
+    def __init__(self, hass, source_identity: str, roles: dict[str, str],
+                 *, expected_roles: dict[str, str] | None = None,
+                 readback_timeout: float = 6.0):
+        self.hass = hass
+        self.identity = source_identity
+        self.roles = dict(roles)
+        if set(self.roles) != set(DOMAINS) or len(set(self.roles.values())) != len(DOMAINS):
+            raise ControlError("invalid_role_mapping")
+        if not 0 < readback_timeout <= 15:
+            raise ControlError("invalid_readback_timeout")
+        self.readback_timeout = readback_timeout
+        self._lock = asyncio.Lock()
+        self.admission = None
+        fingerprints = self._fingerprints()
+        if expected_roles is not None and fingerprints != expected_roles:
+            raise ControlError("role_identity_changed")
+        self.role_identities = fingerprints
+        self.extra_roles = {}
+        self.extra_pins = {}
+
+    def configure_extras(self, configured, pins):
+        """Only explicitly reviewed, distinct, same-source roles may be added."""
+        if not isinstance(configured, dict) or not isinstance(pins, dict):
+            raise ControlError("extra_mapping_invalid")
+        registry = self._registry()
+        source = registry.async_get(self.roles["humidifier"])
+        used = set(self.roles.values())
+        for role, entity_id in configured.items():
+            if role not in EXTRA_DOMAINS or not isinstance(entity_id, str) or entity_id in used:
+                continue
+            try:
+                pin = _role_fingerprint(source, registry.async_get(entity_id), role, self.identity)
+            except ControlError:
+                continue
+            if pins.get(role) != pin:
+                continue
+            self.extra_roles[role] = entity_id
+            self.extra_pins[role] = pin
+            used.add(entity_id)
+
+    def _entity_id(self, role):
+        return self.roles[role] if role in self.roles else self.extra_roles[role]
+
+    def _registry(self):
+        from homeassistant.helpers import entity_registry as er
+
+        try:
+            resolve_source(self.hass, self.roles["humidifier"], expected=self.identity)
+        except BindingError as exc:
+            raise ControlError("source_identity_changed") from exc
+        return er.async_get(self.hass)
+
+    def _fingerprints(self) -> dict[str, str]:
+        registry = self._registry()
+        source = registry.async_get(self.roles["humidifier"])
+        return {
+            role: _role_fingerprint(source, registry.async_get(entity_id), role, self.identity)
+            for role, entity_id in self.roles.items()
+        }
+
+    def _check_role(self, role: str) -> None:
+        registry = self._registry()
+        source = registry.async_get(self.roles["humidifier"])
+        fingerprint = _role_fingerprint(
+            source, registry.async_get(self._entity_id(role)), role, self.identity)
+        if (self.role_identities | self.extra_pins)[role] != fingerprint:
+            raise ControlError("role_identity_changed")
+
+    def state(self, role: str):
+        """Actual HA state only; no optimistic cache or synthetic values."""
+        if role not in self.roles and role not in self.extra_roles:
+            raise ControlError("invalid_role")
+        self._check_role(role)
+        state = self.hass.states.get(self._entity_id(role))
+        if state is None or state.state in ("unknown", "unavailable"):
+            raise ControlError("source_unavailable")
+        return state
+
+    def _power_state(self) -> str:
+        value = self.state("humidifier").state
+        if value not in ("on", "off"):
+            raise ControlError("source_unavailable")
+        return value
+
+    def _options(self, role: str, required: tuple[str, ...]) -> None:
+        attr = "available_modes" if role == "humidifier" else "options"
+        options = self.state(role).attributes.get(attr)
+        if (not isinstance(options, (list, tuple))
+                or not all(isinstance(item, str) for item in options)
+                or not set(required).issubset(options)):
+            raise ControlError("source_options_changed")
+
+    async def _wait(self, role, predicate) -> None:
+        from homeassistant.core import callback
+        from homeassistant.helpers.event import async_track_state_change_event
+
+        event = asyncio.Event()
+        entity_id = self._entity_id(role)
+
+        @callback
+        def changed(_event):
+            event.set()
+
+        unsubscribe = async_track_state_change_event(self.hass, (entity_id,), changed)
+        try:
+            async with asyncio.timeout(self.readback_timeout):
+                while True:
+                    event.clear()
+                    self._power_state()
+                    if predicate(self.state(role)):
+                        return
+                    await event.wait()
+        except TimeoutError as exc:
+            raise ControlError("readback_timeout") from exc
+        finally:
+            unsubscribe()
+
+    def _ensure_services(self, *services: tuple[str, str]) -> None:
+        if any(not self.hass.services.has_service(*service) for service in services):
+            raise ControlError("service_unavailable")
+
+    async def _send(self, role, domain, service, parameters, predicate, context) -> None:
+        # Recheck while holding the command lock, before every write,
+        # including later steps of a fan or brightness command.
+        if self.admission is not None and not self.admission():
+            raise ControlError("export_review_required")
+        self._power_state()
+        state = self.state(role)
+        if predicate(state):
+            return
+        self._ensure_services((domain, service))
+        # Only known service and confirmed role IDs are passed to HA. No
+        # arbitrary caller-supplied service names or target entity IDs.
+        await self.hass.services.async_call(
+            domain, service, {"entity_id": self._entity_id(role), **parameters},
+            blocking=True, context=context,
+        )
+        await self._wait(role, predicate)
+
+    async def _power(self, enabled: bool, context) -> None:
+        expected = "on" if enabled else "off"
+        await self._send("humidifier", "humidifier", "turn_on" if enabled else "turn_off",
+                         {}, lambda state: state.state == expected, context)
+
+    async def power(self, enabled: bool, *, context=None) -> None:
+        if not isinstance(enabled, bool):
+            raise ControlError("invalid_value")
+        async with self._lock:
+            await self._power(enabled, context)
+
+    async def target_humidity(self, humidity: int, *, context=None) -> None:
+        humidity = _integer(humidity, 30, 70)
+        async with self._lock:
+            await self._send(
+                "humidifier", "humidifier", "set_humidity", {"humidity": humidity},
+                lambda state: state.attributes.get("humidity") == humidity, context,
+            )
+
+    async def _mode(self, mode: str, context) -> None:
+        self._options("humidifier", MODES)
+        if self._power_state() != "on":
+            raise ControlError("power_on_required")
+        await self._send("humidifier", "humidifier", "set_mode", {"mode": mode},
+                         lambda state: state.attributes.get("mode") == mode, context)
+
+    async def mode(self, mode: str, *, context=None) -> None:
+        if mode not in MODES:
+            raise ControlError("invalid_value")
+        async with self._lock:
+            await self._mode(mode, context)
+
+    async def fan_percentage(self, percentage: int, *, context=None) -> None:
+        percentage = _integer(percentage, 0, 100)
+        async with self._lock:
+            if percentage == 0:
+                await self._power(False, context)
+                return
+            # Verify all roles and mode choices before a multi-step command.
+            self._options("fan", FAN_OPTIONS)
+            self._options("humidifier", MODES)
+            level = str(max(1, min(5, (percentage + 10) // 20)))
+            self._ensure_services(("humidifier", "set_mode"), ("select", "select_option"))
+            if self._power_state() == "off":
+                self._ensure_services(("humidifier", "turn_on"))
+                await self._power(True, context)
+            self._options("fan", FAN_OPTIONS)
+            await self._mode("Manual", context)
+            self._options("fan", FAN_OPTIONS)
+            await self._send("fan", "select", "select_option", {"option": level},
+                             lambda state: state.state == level, context)
+
+    async def led(self, enabled: bool, brightness: int | None = None, *, context=None) -> None:
+        if not isinstance(enabled, bool):
+            raise ControlError("invalid_value")
+        if brightness is not None:
+            brightness = _integer(brightness, 0, 255)
+            if brightness == 0:
+                enabled = False
+            if not enabled and brightness > 0:
+                raise ControlError("invalid_value")
+        async with self._lock:
+            self._power_state()
+            if self.state("led").state not in ("on", "off"):
+                raise ControlError("source_unavailable")
+            if enabled and brightness is not None:
+                self._options("brightness", LED_OPTIONS)
+                self._ensure_services(("select", "select_option"))
+            desired = "on" if enabled else "off"
+            await self._send("led", "switch", "turn_on" if enabled else "turn_off",
+                             {}, lambda state: state.state == desired, context)
+            if enabled and brightness is not None:
+                level = str(max(1, min(8, (brightness * 8 + 127) // 255)))
+                self._options("brightness", LED_OPTIONS)
+                await self._send(
+                    "brightness", "select", "select_option", {"option": level},
+                    lambda state: state.state == level, context,
+                )
+
+    def extra_value(self, role):
+        state = self.state(role)
+        if role == "led_color":
+            self._options(role, COLORS)
+            if state.state not in COLORS:
+                raise ControlError("source_options_changed")
+            return state.state
+        if role == "hybrid":
+            if state.state not in ("on", "off"):
+                raise ControlError("source_unavailable")
+            return state.state == "on"
+        if role == "rh_offset":
+            attrs = state.attributes
+            if (attrs.get("min") != -10 or attrs.get("max") != 10
+                    or attrs.get("step") != 1 or attrs.get("unit_of_measurement") != "%"):
+                raise ControlError("source_range_changed")
+            try:
+                return _integer(float(state.state), -10, 10)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ControlError("source_range_changed") from exc
+        raise ControlError("invalid_role")
+
+    async def set_extra(self, role, value, *, context=None):
+        async with self._lock:
+            self.extra_value(role)
+            if role == "led_color" and value in COLORS:
+                await self._send(role, "select", "select_option", {"option": value},
+                                 lambda state: state.state == value, context)
+            elif role == "hybrid" and type(value) is bool:
+                expected = "on" if value else "off"
+                await self._send(role, "switch", "turn_on" if value else "turn_off", {},
+                                 lambda state: state.state == expected, context)
+            elif role == "rh_offset":
+                value = _integer(value, -10, 10)
+                def matches(state):
+                    try:
+                        return float(state.state) == value
+                    except (TypeError, ValueError, OverflowError):
+                        return False
+                await self._send(role, "number", "set_value", {"value": value}, matches, context)
+            else:
+                raise ControlError("invalid_value")
+            self.extra_value(role)
+
+
+def review_role_change(hass, current, proposed):
+    """Repin only deliberately changed role IDs for the next safe restart.
+
+    The physical source pin and every unchanged role must match the existing
+    identities. A replacement under an unchanged entity ID is not a review.
+    """
+    identity = current.get("native_device_identity")
+    previous = current.get("native_role_identities")
+    if identity is None and previous is None:
+        return {}
+    if not isinstance(identity, str) or (previous is not None and (
+        not isinstance(previous, dict) or set(previous) != set(DOMAINS)
+    )):
+        raise ControlError("role_pin_invalid")
+    if proposed.get("humidifier_entity") != current.get("humidifier_entity"):
+        raise ControlError("source_identity_changed")
+    roles = {role: proposed.get(role + "_entity") for role in DOMAINS}
+    controller = NativeControl(hass, identity, roles)
+    if previous is not None:
+        for role, pin in controller.role_identities.items():
+            field = role + "_entity"
+            if proposed.get(field) == current.get(field) and previous[role] != pin:
+                raise ControlError("role_identity_changed")
+    return {"native_role_identities": controller.role_identities.copy()}
+
+

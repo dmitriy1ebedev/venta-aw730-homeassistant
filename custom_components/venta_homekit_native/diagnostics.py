@@ -77,6 +77,38 @@ def _bridge_status(hass: Any, entry_id: Any) -> str:
     return "ready" if ready else "not_ready"
 
 
+def native_ui_status(hass: Any) -> dict[str, Any]:
+    """Bounded status only; no registry identifiers or raw sensor values."""
+    result = {"device_registered": False, "platforms_loaded": False,
+              "control_status": "not_configured", "sensor_count": 0}
+    try:
+        active = getattr(hass, "data", {}).get("venta_homekit_native", {})
+        result["device_registered"] = bool(active.get("native_device"))
+        result["platforms_loaded"] = active.get("native_ui_platforms_loaded") is True
+        controller = active.get("native_control")
+        if controller is None:
+            return result
+        if not result["platforms_loaded"]:
+            result["control_status"] = "not_enabled"
+        elif controller.admission is None or not controller.admission():
+            result["control_status"] = "review_exports"
+        else:
+            from .native_control import ControlError
+            try:
+                controller.state("humidifier")
+            except ControlError:
+                result["control_status"] = "source_unavailable"
+            else:
+                result["control_status"] = "ready"
+        sensors = active.get("native_sensors")
+        if sensors is not None:
+            result["sensor_count"] = 2 + sum(
+                role in sensors.roles for role in ("pm25", "water_level", "filter_days", "cleaning_days", "service_days"))
+    except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
+        result["control_status"] = "unknown"
+    return result
+
+
 def collect_diagnostics(
     hass: Any,
     *,
@@ -134,6 +166,7 @@ def collect_diagnostics(
         "humidifier": humidifier,
         "linked_entities": linked,
         "homekit_bridge": bridge,
+        "native_ui": native_ui_status(hass),
         "recommendation": recommendation,
         # Historical LocalTuya handshake errors are NOT observable via HA
         # state alone. Never infer a root cause from 'unavailable'.

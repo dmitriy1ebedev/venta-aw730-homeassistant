@@ -89,7 +89,8 @@ class V130ReleaseWorkflowTests(unittest.TestCase):
         self.assertIs(job["steps"][0]["with"]["persist-credentials"], False)
         for required in ("workflow_run.conclusion == 'success'", "workflow_run.event == 'push'",
                          "workflow_run.head_branch == 'main'", "workflow_run.head_repository.full_name == github.repository",
-                         "github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant'"):
+                         "github.repository == 'dmitriy1ebedev/venta-aw730-homeassistant'",
+                         "workflow_run.head_sha == 'de9a63596cecb409ba5ac72688e222626bcdbc8c'"):
             self.assertIn(required, job["if"])
         commands = "\n".join(step.get("run", "") for step in job["steps"])
         for required in ("actions/runs/$CI_RUN/jobs", "jobs['total_count']", "j['conclusion'] == 'success'",

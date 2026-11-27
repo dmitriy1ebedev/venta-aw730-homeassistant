@@ -114,7 +114,36 @@ class TCPServer(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
-def serve(bridge: Path, source: Path):
+def stage_native_browser_fixture(root: Path, capture_path: Path):
+    """Replay the actual isolated registry snapshot for stock HA UI rendering.
+
+    The live command path is tested separately by ha_entity_registry_smoke.
+    These two deliberately inert stub integrations only keep captured entries
+    loaded; they cannot control a device or create a HomeKit pairing.
+    """
+    capture = json.loads(capture_path.read_text())
+    assert len(capture["entities"]) == 13
+    assert {row["entry_id"] for row in capture["storage"]["core.config_entries"]["data"]["entries"]} == {
+        "ci-localtuya", "ci-venta", "ci-homekit"}
+    for name in ("core.device_registry", "core.entity_registry", "core.config_entries"):
+        (root / ".storage" / name).write_text(json.dumps(capture["storage"][name]))
+    for domain, name in (("localtuya", "Synthetic LocalTuya"), ("venta_homekit_native", "Venta AW730")):
+        component = root / "custom_components" / domain
+        component.mkdir(parents=True)
+        (component / "manifest.json").write_text(json.dumps({
+            "domain": domain, "name": name, "version": "0.0.1",
+            "config_flow": True, "codeowners": [], "iot_class": "local_push",
+            "integration_type": "device", "documentation": "https://example.invalid/fixture",
+        }))
+        (component / "__init__.py").write_text(
+            "async def async_setup_entry(hass, entry):\n    return True\n")
+        (component / "config_flow.py").write_text(
+            "from homeassistant import config_entries\n"
+            f"class FixtureFlow(config_entries.ConfigFlow, domain={domain!r}):\n    VERSION = 1\n")
+    (root / "native-states.json").write_text(json.dumps(capture["states"]))
+
+
+def serve(bridge: Path, source: Path, native_capture: Path | None = None):
     import yaml
     from homeassistant.const import __version__
     if __version__ != "2026.11.1":
@@ -129,6 +158,8 @@ def serve(bridge: Path, source: Path):
             "version": 4, "minor_version": 1, "key": "onboarding",
             "data": {"done": ["core_config", "analytics", "integration"]},
         }))
+        if native_capture is not None:
+            stage_native_browser_fixture(root, native_capture)
         www = root / "www"
         www.mkdir()
         shutil.copyfile(source / "venta-airwasher-card.js", www / "venta-airwasher-card.js")
@@ -143,7 +174,16 @@ def serve(bridge: Path, source: Path):
             "version": "0.0.1", "codeowners": [], "iot_class": "local_push",
             "documentation": "https://example.invalid/fixture",
         }))
-        (fixture / "__init__.py").write_text(FAKE_INTEGRATION)
+        fixture_code = FAKE_INTEGRATION
+        if native_capture is not None:
+            fixture_code = fixture_code.replace("    return True", """    import json
+    from pathlib import Path
+    def load_states():
+        return json.loads(Path(hass.config.path("native-states.json")).read_text())
+    for entity_id, state in (await hass.async_add_executor_job(load_states)).items():
+        hass.states.async_set(entity_id, state["state"], state["attributes"])
+    return True""")
+        (fixture / "__init__.py").write_text(fixture_code)
         (root / "configuration.yaml").write_text(yaml.safe_dump({
             "homeassistant": {
                 "name": "Venta CI", "latitude": 0, "longitude": 0,
@@ -222,7 +262,49 @@ def request(base, path, data=None, auth=None, *, form=False):
         raise AssertionError(f"fixture endpoint {path.split('?')[0]} HTTP {err.code}") from None
 
 
-def browser_test(base, chrome):
+def check_native_device_page(page, base, capture, width):
+    """Actual stock integration/device pages, captured synthetic registry."""
+    from playwright.sync_api import expect
+
+    page.goto(base + "/config/integrations/integration/venta_homekit_native",
+              wait_until="domcontentloaded", timeout=45000)
+    entry = page.locator('ha-config-entry-row[data-entry-id="ci-venta"]')
+    expect(entry).to_be_visible(timeout=60000)
+    device_id = capture["device_id"]
+    row = entry.locator("ha-config-entry-device-row")
+    expect(row).to_have_count(1, timeout=30000)
+    expect(row).to_be_visible(timeout=30000)
+    assert row.evaluate("el => el.device.id") == device_id
+    row.locator('[slot="headline"]').click()
+    expect(page).to_have_url(base + "/config/devices/device/" + device_id, timeout=30000)
+    expect(page.locator("ha-device-info-card")).to_be_visible(timeout=60000)
+    cards = page.locator("ha-device-entities-card")
+    expected = set(capture["entities"].values())
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        observed = set(cards.evaluate_all(
+            "(els) => els.flatMap(el => (el.entities || []).map(e => e.entity_id))"))
+        if observed == expected:
+            break
+        page.wait_for_timeout(250)
+    else:
+        raise AssertionError(f"stock device card roster mismatch: {len(observed)} != {len(expected)}")
+    # HA frontend 20261028.5 renders active rows as plain divs under ha-list.
+    # Later builds add role=listitem. Count actual active row wrappers in
+    # either markup, not unavailable placeholders or registry metadata.
+    rows = cards.locator("#entities > ha-list > div:not(.divider), #entities > ha-list-base > div[role=listitem]")
+    expect(rows).to_have_count(len(expected), timeout=30000)
+    for row in rows.all():
+        expect(row).to_be_visible(timeout=10000)
+    assert cards.evaluate_all("(els) => els.every(el => el.entities.every(e => !!el.hass.states[e.entity_id] && !['unknown','unavailable'].includes(el.hass.states[e.entity_id].state)))"), "native device state missing"
+    for card in cards.all():
+        bounds = card.bounding_box()
+        if bounds is None or bounds["x"] < -1 or bounds["x"] + bounds["width"] > width + 1:
+            raise AssertionError("stock HA device card overflows viewport")
+    print(f"PASS: stock integration/device UI {width}px, {len(expected)} registry-backed entities", flush=True)
+
+
+def browser_test(base, chrome, native_capture=None):
     from playwright.sync_api import sync_playwright, expect
     client_id = base + "/"
     code = request(base, "/api/onboarding/users", {
@@ -350,6 +432,8 @@ def browser_test(base, chrome):
                         if not chart.evaluate("(el) => !!el.historyData"):
                             raise AssertionError("native history graph has no history data")
                     print(f"PASS: actual HA frontend, {width}px {'mobile emulation' if mobile else 'desktop'}", flush=True)
+                    if native_capture is not None:
+                        check_native_device_page(page, base, native_capture, width)
                 finally:
                     context.close()
         finally:
@@ -366,7 +450,7 @@ def browser_test(base, chrome):
     print("REAL_LOVELACE_BROWSER_PASS", flush=True)
 
 
-def client(bridge: Path, chrome: str):
+def client(bridge: Path, chrome: str, native_capture: Path | None = None):
     sock = bridge / "ha.sock"
     deadline = time.monotonic() + 110
     while not sock.is_socket() and time.monotonic() < deadline:
@@ -387,7 +471,8 @@ def client(bridge: Path, chrome: str):
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
         try:
-            browser_test(f"http://127.0.0.1:{server.server_address[1]}", chrome)
+            browser_test(f"http://127.0.0.1:{server.server_address[1]}", chrome,
+                         json.loads(native_capture.read_text()) if native_capture else None)
         finally:
             server.shutdown()
             worker.join(timeout=5)
@@ -399,8 +484,9 @@ if __name__ == "__main__":
     ap.add_argument("--bridge", type=Path, required=True)
     ap.add_argument("--source", type=Path)
     ap.add_argument("--chrome")
+    ap.add_argument("--native-capture", type=Path)
     args = ap.parse_args()
     if args.mode == "serve":
-        serve(args.bridge, args.source)
+        serve(args.bridge, args.source, args.native_capture)
     else:
-        client(args.bridge, args.chrome)
+        client(args.bridge, args.chrome, args.native_capture)
