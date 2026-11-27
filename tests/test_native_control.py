@@ -110,6 +110,20 @@ class NativeControlTests(unittest.IsolatedAsyncioTestCase):
     def names(self):
         return [(d, s) for d, s, _, _ in self.calls]
 
+    async def test_export_change_stops_multistep_command(self):
+        allowed = True
+        self.controller.admission = lambda: allowed
+        def change_export(domain, service):
+            nonlocal allowed
+            allowed = False
+        self.after_call = change_export
+        with self.assertRaisesRegex(native.ControlError, "export_review_required"):
+            await self.controller.fan_percentage(80)
+        self.assertEqual(self.names(), [("humidifier", "turn_on")])
+        with self.assertRaisesRegex(native.ControlError, "export_review_required"):
+            await self.controller.power(False)
+        self.assertEqual(len(self.calls), 1)
+
     async def test_power_and_target_humidity_use_original_entity_and_context(self):
         context = object()
         await self.controller.power(True, context=context)

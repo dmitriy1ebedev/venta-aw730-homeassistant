@@ -37,3 +37,10 @@ class ExplicitFilterTests(unittest.TestCase):
         self.assertFalse(guard._explicit_filter(
             {"include_entities": ["humidifier.original"], "unknown": True},
             self.registry))
+
+    def test_invalid_filter_types_rejected(self):
+        for key, value in (("include_domains", False), ("exclude_entities", "sensor.test"),
+                           ("exclude_entity_globs", [None]), ("exclude_domains", {})):
+            with self.subTest(key=key):
+                self.assertFalse(guard._explicit_filter(
+                    {"include_entities": ["humidifier.original"], key: value}, self.registry))

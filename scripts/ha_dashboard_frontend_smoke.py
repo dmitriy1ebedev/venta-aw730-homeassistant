@@ -289,7 +289,14 @@ def check_native_device_page(page, base, capture, width):
         page.wait_for_timeout(250)
     else:
         raise AssertionError(f"stock device card roster mismatch: {len(observed)} != {len(expected)}")
-    expect(cards.locator('[role="listitem"]')).to_have_count(10, timeout=30000)
+    # HA frontend 20261028.5 renders active rows as plain divs under ha-list.
+    # Later builds add role=listitem. Count actual active row wrappers in
+    # either markup, not unavailable placeholders or registry metadata.
+    rows = cards.locator("#entities > ha-list > div:not(.divider), #entities > ha-list-base > div[role=listitem]")
+    expect(rows).to_have_count(10, timeout=30000)
+    for row in rows.all():
+        expect(row).to_be_visible(timeout=10000)
+    assert cards.evaluate_all("(els) => els.every(el => el.entities.every(e => !!el.hass.states[e.entity_id] && !['unknown','unavailable'].includes(el.hass.states[e.entity_id].state)))"), "native device state missing"
     for card in cards.all():
         bounds = card.bounding_box()
         if bounds is None or bounds["x"] < -1 or bounds["x"] + bounds["width"] > width + 1:

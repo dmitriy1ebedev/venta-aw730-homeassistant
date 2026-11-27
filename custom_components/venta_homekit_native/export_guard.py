@@ -13,6 +13,9 @@ DOMAIN = "venta_homekit_native"
 def _explicit_filter(filter_config, registry) -> bool:
     if not isinstance(filter_config, Mapping):
         return False
+    if any(not isinstance(values, (list, tuple)) or not all(isinstance(value, str) and value for value in values)
+           for values in filter_config.values()):
+        return False
     if filter_config.get("include_domains") or filter_config.get("include_entity_globs"):
         return False
     if set(filter_config) - {
@@ -38,20 +41,28 @@ def export_blockers(hass, entry_id: str) -> tuple[str, ...]:
     registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
     blockers = []
+    venta_entries = {entry.entry_id for entry in hass.config_entries.async_entries(DOMAIN)}
+    venta_entries.add(entry_id)
     for entry in hass.config_entries.async_entries("homekit"):
         options = entry.options
+        if not isinstance(options, Mapping):
+            blockers.append("homekit_filter_not_explicit")
+            continue
         if not _explicit_filter(options.get("filter"), registry):
             blockers.append("homekit_filter_not_explicit")
         device_ids = options.get("devices", [])
         if not isinstance(device_ids, (list, tuple)) or any(
             not isinstance(device_id, str)
             or (device := device_registry.async_get(device_id)) is None
-            or getattr(device, "config_entry_id", None) == entry_id
+            or getattr(device, "config_entry_id", None) in venta_entries
             for device_id in device_ids
         ):
             blockers.append("homekit_device_export_conflict")
     for entry in hass.config_entries.async_entries("yandex_smart_home"):
         options = entry.options
+        if not isinstance(options, Mapping):
+            blockers.append("yaha_filter_unverified")
+            continue
         source = options.get("filter_source")
         if source == "config_entry":
             if not _explicit_filter(options.get("filter"), registry):

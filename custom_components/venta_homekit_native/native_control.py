@@ -68,6 +68,7 @@ class NativeControl:
             raise ControlError("invalid_readback_timeout")
         self.readback_timeout = readback_timeout
         self._lock = asyncio.Lock()
+        self.admission = None
         fingerprints = self._fingerprints()
         if expected_roles is not None and fingerprints != expected_roles:
             raise ControlError("role_identity_changed")
@@ -152,6 +153,10 @@ class NativeControl:
             raise ControlError("service_unavailable")
 
     async def _send(self, role, domain, service, parameters, predicate, context) -> None:
+        # Recheck while holding the command lock, before every write,
+        # including later steps of a fan or brightness command.
+        if self.admission is not None and not self.admission():
+            raise ControlError("export_review_required")
         self._power_state()
         state = self.state(role)
         if predicate(state):

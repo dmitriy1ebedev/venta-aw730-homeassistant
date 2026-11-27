@@ -692,6 +692,18 @@ async def _setup_native_platforms(hass: HomeAssistant, entry) -> None:
             _LOGGER.warning("Venta: native UI requires review of HomeKit/Yaha exports")
             return
         active["native_ui_enabled"] = True
+
+        def admitted():
+            try:
+                current = hass.config_entries.async_get_entry(entry.entry_id)
+                return bool(current is not None and current.options.get("native_device_ui") is True
+                            and active.get("native_ui_enabled") is True
+                            and hass.data.get(DOMAIN) is active
+                            and not export_blockers(hass, entry.entry_id))
+            except (AttributeError, RuntimeError, TypeError, ValueError):
+                return False
+
+        active["native_control"].admission = admitted
         await hass.config_entries.async_forward_entry_setups(entry, platforms)
         # HA may log and absorb forwarded platform errors. Verify the actual
         # registered entities rather than treating a returned coroutine as proof.

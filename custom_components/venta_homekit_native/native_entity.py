@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from homeassistant.core import callback
+from homeassistant.config_entries import SIGNAL_CONFIG_ENTRY_CHANGED
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import Entity
@@ -75,8 +77,21 @@ class VentaEntity(Entity):
 
         @callback
         def registry_changed(event):
-            if event.data.get("entity_id") in self.controller.roles.values():
+            entity_id = event.data.get("entity_id")
+            # Source changes and labels on any Venta projection can affect
+            # the shared export admission of every entity.
+            row = er.async_get(self.hass).async_get(entity_id) if entity_id else None
+            if entity_id in self.controller.roles.values() or (
+                    row is not None and row.platform == DOMAIN) or event.data.get("action") == "remove":
                 self.async_write_ha_state()
+
+        @callback
+        def entry_changed(_change, entry):
+            if entry.domain in (DOMAIN, "localtuya", "homekit", "yandex_smart_home"):
+                self.async_write_ha_state()
+
+        self.async_on_remove(async_dispatcher_connect(
+            self.hass, SIGNAL_CONFIG_ENTRY_CHANGED, entry_changed))
 
         self.async_on_remove(self.hass.bus.async_listen(
             er.EVENT_ENTITY_REGISTRY_UPDATED, registry_changed))

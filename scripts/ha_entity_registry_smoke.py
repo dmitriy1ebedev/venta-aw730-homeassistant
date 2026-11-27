@@ -414,6 +414,24 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
                 await dispatch("led", "light", "turn_off")
                 assert native_state("led").state == "off"
                 before = len(calls)
+                # A live change in HomeKit export options must immediately
+                # make Venta projections unavailable, without changing the
+                # original registry or dispatching a hardware command.
+                safe_options = dict(bridge.options)
+                hass.config_entries.async_update_entry(bridge, options={"filter": {}})
+                await hass.async_block_till_done()
+                assert all(hass.states.get(row.entity_id).state == "unavailable" for row in projections.values())
+                from homeassistant.exceptions import HomeAssistantError
+                try:
+                    await dispatch("humidifier", "humidifier", "turn_off")
+                except HomeAssistantError:
+                    pass
+                else:
+                    raise AssertionError("unsafe export command accepted")
+                assert len(calls) == before
+                hass.config_entries.async_update_entry(bridge, options=safe_options)
+                await hass.async_block_till_done()
+                assert native_state("humidifier").state == "on"
                 hass.states.async_set(roles["pm25"], "unavailable")
                 await hass.async_block_till_done()
                 assert native_state("pm25").state == "unavailable"
@@ -434,7 +452,8 @@ def validate_native_platforms(config: Path, browser_fixture: Path | None = None)
             ]
             return {"real_platform_entities": len(projections), "native_service_dispatch": True,
                     "source_registry_unchanged": True, "unavailable_propagates": True,
-                    "synthetic_service_calls": len(calls), "physical_device_calls": 0}
+                    "synthetic_service_calls": len(calls), "physical_device_calls": 0,
+                    "runtime_export_guard": True}
         finally:
             await hass.async_stop(force=True)
             sys.path.remove(str(root))

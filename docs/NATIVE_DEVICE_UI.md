@@ -43,8 +43,11 @@ opt-in service-advisory monitor is not duplicated.
    admitted. Broad, missing, YAML-only or unknown export filters block native
    projections instead of altering another integration. Do not add the new
    Venta projections to Apple Home or Alice; keep the original physical
-   source exported once. A later manual widening of another integration's
-   filters is outside automatic export control; review it before changing it.
+   source exported once. Later filter changes and Venta label changes refresh
+   projection availability and every delegated write rechecks the gate.
+   This blocks commands but cannot stop another integration from exporting
+   an unavailable registry entity after manual filter widening. Review filters
+   before changing them; Venta never rewrites foreign export configuration.
 5. A deliberate same-device role change is applied only through the existing
    reconfigure wizard after confirmation. The source pin is never reset and
    unchanged roles must retain their pins. Replacing an optional sensor under
