@@ -64,6 +64,19 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
             stored_service_map = {}
         errors: dict[str, str] = {}
         if user_input is not None:
+            native_ui = user_input.get("native_device_ui", entry.options.get("native_device_ui", False))
+            if type(native_ui) is not bool:
+                errors["base"] = "native_export_review_required"
+            elif native_ui:
+                if user_input.get("confirm_native_device_ui") is not True:
+                    errors["base"] = "native_export_review_required"
+                else:
+                    from .export_guard import export_blockers
+                    try:
+                        if export_blockers(self.hass, entry.entry_id):
+                            errors["base"] = "native_export_review_required"
+                    except (AttributeError, RuntimeError, TypeError, ValueError):
+                        errors["base"] = "native_export_review_required"
             requested_service_map = {}
             for role in SERVICE_ROLES:
                 field = f"{role}_entity"
@@ -112,6 +125,10 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
                     options["service_advisory_entities"] = requested_service_map
                 else:
                     options.pop("service_advisory_entities", None)
+                if native_ui:
+                    options["native_device_ui"] = True
+                else:
+                    options.pop("native_device_ui", None)
                 return self.async_create_entry(title="", data=options)
 
         def required_choice(key: str, choices: Any) -> Any:
@@ -142,6 +159,8 @@ class VentaOptionsFlow(config_entries.OptionsFlow):
                 **{entity_id: entity_id for entity_id in available_service_sensors},
             })
         schema[vol.Optional("confirm_service_monitoring", default=False)] = bool
+        schema[vol.Optional("native_device_ui", default=entry.options.get("native_device_ui") is True)] = bool
+        schema[vol.Optional("confirm_native_device_ui", default=False)] = bool
         schema[vol.Required("confirm_staging", default=False)] = bool
         return self.async_show_form(
             step_id="init", data_schema=vol.Schema(schema), errors=errors,

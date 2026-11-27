@@ -88,7 +88,9 @@
           "filter_days_entity": "Датчик срока фильтра (дни) — необязательно",
           "cleaning_days_entity": "Датчик срока очистки (дни) — необязательно",
           "service_days_entity": "Датчик сервисного интервала (дни) — необязательно",
-          "confirm_service_monitoring": "Я включаю только уведомления без команд устройству после следующего безопасного запуска HA"
+          "confirm_service_monitoring": "Я включаю только уведомления без команд устройству после следующего безопасного запуска HA",
+          "native_device_ui": "Собственные элементы управления Venta (после перезапуска)",
+          "confirm_native_device_ui": "Подтверждаю проверку экспорта HomeKit и Яндекс"
         }
       }
     },
@@ -96,7 +98,8 @@
       "staging_confirmation_required": "Подтвердите сохранение только предложения.",
       "invalid_entity": "Сущность недоступна или принадлежит другому устройству.",
       "bridge_unavailable": "Выбранный мост HomeKit недоступен.",
-      "bridge_excludes_humidifier": "Мост HomeKit исключает этот увлажнитель."
+      "bridge_excludes_humidifier": "Мост HomeKit исключает этот увлажнитель.",
+      "native_export_review_required": "Проверьте явные фильтры экспорта HomeKit и Яндекс, подтвердите выбор."
     },
     "abort": {
       "yaml_or_other_owner": "Действующая привязка HomeKit принадлежит YAML или другой записи.",
@@ -126,6 +129,23 @@
           "entry_missing": "Запись конфигурации Venta не найдена.",
           "yaml_or_other_owner": "Действующей привязкой владеет YAML или другая запись."
         }
+      }
+    }
+  },
+  "entity": {
+    "humidifier": {
+      "native_humidifier": {
+        "name": "Увлажнитель"
+      }
+    },
+    "fan": {
+      "native_fan": {
+        "name": "Вентилятор"
+      }
+    },
+    "light": {
+      "native_led": {
+        "name": "Подсветка"
       }
     }
   }

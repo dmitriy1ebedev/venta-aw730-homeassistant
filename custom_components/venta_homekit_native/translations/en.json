@@ -88,7 +88,9 @@
           "filter_days_entity": "Filter interval sensor (days) — optional",
           "cleaning_days_entity": "Cleaning interval sensor (days) — optional",
           "service_days_entity": "Service interval sensor (days) — optional",
-          "confirm_service_monitoring": "I explicitly enable read-only service notifications after the next safe HA start"
+          "confirm_service_monitoring": "I explicitly enable read-only service notifications after the next safe HA start",
+          "native_device_ui": "Native Venta controls (after restart)",
+          "confirm_native_device_ui": "I confirm HomeKit and Yandex export review"
         }
       }
     },
@@ -96,7 +98,8 @@
       "staging_confirmation_required": "Confirm that this only stages a proposal.",
       "invalid_entity": "The selected entity is unavailable or belongs to another device.",
       "bridge_unavailable": "The selected HomeKit bridge is not available.",
-      "bridge_excludes_humidifier": "The HomeKit bridge excludes this humidifier."
+      "bridge_excludes_humidifier": "The HomeKit bridge excludes this humidifier.",
+      "native_export_review_required": "Review explicit HomeKit and Yandex export filters and confirm."
     },
     "abort": {
       "yaml_or_other_owner": "The current Venta HomeKit binding is owned by YAML or another entry.",
@@ -126,6 +129,23 @@
           "entry_missing": "This Venta configuration entry no longer exists.",
           "yaml_or_other_owner": "The active bridge is owned by YAML or another entry."
         }
+      }
+    }
+  },
+  "entity": {
+    "humidifier": {
+      "native_humidifier": {
+        "name": "Humidifier"
+      }
+    },
+    "fan": {
+      "native_fan": {
+        "name": "Fan"
+      }
+    },
+    "light": {
+      "native_led": {
+        "name": "LED"
       }
     }
   }
