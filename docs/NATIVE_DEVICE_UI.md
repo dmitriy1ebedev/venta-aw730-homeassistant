@@ -45,8 +45,9 @@ configured sensor count without registry IDs or raw values.
 3. In the Venta entry's Options, review the existing roles, choose any
    optional sensors, check **Native Venta controls** and explicitly confirm
    the export review. Saving stages settings. Restart manually after backup.
-4. Only explicit entity allowlists (or the supported Yaha label filter) are
-   admitted. Broad, missing, YAML-only or unknown export filters block native
+4. Only explicit entity allowlists, disjoint domain inclusion (e.g. climate),
+   or the supported Yaha label filter are admitted. Overlapping domains,
+   broad globs, missing entity IDs, YAML-only or unknown filters block native
    projections instead of altering another integration. Do not add the new
    Venta projections to Apple Home or Alice; keep the original physical
    source exported once. Later filter changes and Venta label changes refresh

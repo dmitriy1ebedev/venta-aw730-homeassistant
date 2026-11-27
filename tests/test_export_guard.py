@@ -28,6 +28,17 @@ class ExplicitFilterTests(unittest.TestCase):
                         "include_entity_globs": ["fan.*"]}):
             self.assertFalse(guard._explicit_filter(config, self.registry))
 
+    def test_disjoint_domain_allowed_without_widening_venta_exports(self):
+        self.assertTrue(guard._explicit_filter(
+            {"include_entities": ["humidifier.original"], "include_domains": ["climate"]},
+            self.registry))
+        self.assertTrue(guard._explicit_filter({"include_domains": ["climate"]}, self.registry))
+        for domain in guard.PROJECTION_DOMAINS:
+            self.assertFalse(guard._explicit_filter(
+                {"include_domains": ["climate", domain]}, self.registry))
+        self.assertFalse(guard._explicit_filter(
+            {"include_domains": ["climate"], "include_entities": ["switch.stale"]}, self.registry))
+
     def test_missing_and_native_entity_rejected(self):
         for entity in ("humidifier.venta", "humidifier.missing"):
             self.assertFalse(guard._explicit_filter(

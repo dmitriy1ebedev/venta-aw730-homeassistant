@@ -8,6 +8,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 DOMAIN = "venta_homekit_native"
+# All currently supported Venta entity platforms; unknown future domains
+# must be added here before enabling their platform.
+PROJECTION_DOMAINS = frozenset({"humidifier", "fan", "light", "sensor", "select", "switch", "number"})
 
 
 def _explicit_filter(filter_config, registry) -> bool:
@@ -16,15 +19,18 @@ def _explicit_filter(filter_config, registry) -> bool:
     if any(not isinstance(values, (list, tuple)) or not all(isinstance(value, str) and value for value in values)
            for values in filter_config.values()):
         return False
-    if filter_config.get("include_domains") or filter_config.get("include_entity_globs"):
+    # Broad inclusion of an unrelated domain (e.g. climate) cannot match
+    # a Venta projection. Broad globs or overlapping domains remain unsafe.
+    if set(filter_config.get("include_domains", ())) & PROJECTION_DOMAINS or filter_config.get("include_entity_globs"):
         return False
     if set(filter_config) - {
         "include_entities", "include_domains", "include_entity_globs",
         "exclude_entities", "exclude_domains", "exclude_entity_globs",
     }:
         return False
-    ids = filter_config.get("include_entities")
-    if not isinstance(ids, (list, tuple)) or not ids:
+    ids = filter_config.get("include_entities", ())
+    # An empty include list with no included domains is a broad default.
+    if not ids and not filter_config.get("include_domains"):
         return False
     return all(
         isinstance(entity_id, str)
